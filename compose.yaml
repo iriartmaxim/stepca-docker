@@ -1,0 +1,244 @@
+services:
+  stepca-root:
+    image: smallstep/step-ca
+    container_name: stepca-root
+    tty: false
+    stdin_open: false
+    restart: unless-stopped
+    environment:
+      DOCKER_STEPCA_INIT_NAME: Maximiliano Iriart
+      DOCKER_STEPCA_INIT_DNS_NAMES: stepca-root, localhost, 127.0.0.1, rootca.local
+      DOCKER_STEPCA_INIT_PROVISIONER: admin@example.com
+      DOCKER_STEPCA_INIT_PASSWORD_FILE: /run/secrets/ca_password
+     # Contraseñas
+      ROOT_PASS_FILE:      /run/secrets/ca_password
+      SUB_PASS_FILE:       /run/secrets/subca_password
+      # Directorio de trabajo temporal
+      INTERMEDIATE_TMP_DIR: /home/step/intermediate_tmp
+      # URL de healthcheck
+      CA_URL:              https://localhost:9000/health
+      # Opciones de CSR
+      INTERMEDIATE_DNS:    stepca-intermediate
+      INTERMEDIATE_KEY_SIZE: 4096
+      INTERMEDIATE_PROFILE:  intermediate-ca
+      CSR_FILE: /home/step/intermediate_tmp/intermediate.csr
+      KEY_FILE: /home/step/intermediate_tmp/secrets/intermediate_ca_key
+      CRT_FILE: /home/step/intermediate_tmp/certs/intermediate.crt
+      STEPDEBUG: 1
+    volumes:
+      - config-volume:/home/step/config
+      - certs-volume:/home/step/certs
+      - secrets-volume:/home/step/secrets
+      - ./scripts/init-root.sh:/scripts/init-root.sh
+      - intermediate-tmp:/home/step/intermediate_tmp/
+    ports:
+      - "9000:9000"
+    secrets:
+      - source: root_ca_password
+        target: ca_password
+      - source: intermediate_ca_password
+        target: subca_password
+        #    command: >
+        #     sh -c " \
+        #        step-ca --password-file=/run/secrets/ca_password /home/step/config/ca.json & \
+        #        /scripts/init-root.sh || echo '[root-init] FALLÓ, pero continúo para debug…'; \
+        #        wait \
+        #      "
+    command: >
+      sh -c "
+      step-ca --password-file=/run/secrets/ca_password /home/step/config/ca.json &
+      /scripts/init-root.sh &&
+      wait
+      "
+    healthcheck:
+      test: ["CMD", "step", "ca", "health", "--ca-url", "https://localhost:9000"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  stepca-intermediate:
+    image: smallstep/step-ca
+    container_name: stepca-intermediate
+    restart: unless-stopped
+    tty: false
+    stdin_open: false
+    depends_on:
+      stepca-root:
+        condition: service_healthy
+    environment:
+      ROOT_CA_URL:          https://stepca-root:9000/health
+      INTERMEDIATE_TMP_DIR: /tmp/intermediate_tmp
+      SUB_PASS_FILE:        /run/secrets/subca_password
+      ROOT_CRT_SRC:         /home/step/certs/rootca/root_ca.crt
+    volumes:
+      - intermediate-certs:/home/step/certs/
+      - intermediate-config:/home/step/config
+      - intermediate-secrets:/home/step/secrets
+      - ./scripts/init-intermediate.sh:/scripts/init-intermediate.sh:ro
+      - ./persistent/root/certs:/home/step/certs:ro        
+      - intermediate-tmp:/tmp/intermediate_tmp/:ro
+      - /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt
+    ports:
+      - "9001:9000"
+    secrets:
+      - source: intermediate_ca_password
+        target: subca_password
+      - source: root_ca_password
+        target: ca_password
+      - source: admin_password
+        target: admin_password
+    command: >
+      sh -c "
+      /scripts/init-intermediate.sh &
+      step-ca --password-file=/run/secrets/subca_password /home/step/config/ca.json
+      "
+    healthcheck:
+      test: ["CMD", "step", "ca", "health", "--ca-url", "https://stepca-intermediate:9000"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+## Nuevo servicio para Registration Authority (RA)
+# Registration Authority (RA)
+  stepca-ra-one.local:
+    image: smallstep/step-ca
+    container_name: stepca-ra-one.local
+    hostname: stepca-ra-one.local                         # <— fija el hostname interno
+    extra_hosts:                                          # <— para que tu máquina host resuelva
+      - "stepca-ra-one.local:127.0.0.1"
+    user: "1000"
+    restart: unless-stopped
+    depends_on:
+      stepca-intermediate:
+        condition: service_healthy
+    environment:
+      # Issuer password for JWK provisioner
+      SUB_PASS_FILE: /home/step/secrets/ra_password
+      # Healthcheck URL for intermediate CA
+      CA_URL: https://stepca-intermediate:9000/health
+    volumes:
+      - ra1-config:/home/step/config
+      - ra1-certs:/home/step/certs
+      - ra1-secrets:/home/step/secrets
+      - ra1-db:/home/step-ca/db
+      - ra1-tmp:/home/step/tmp
+      - /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt
+    ports:
+      - "9100:9100"
+    secrets:
+
+      - source: ra_password
+        target: ra_password
+    command: >
+       sh -c "step-ca  /home/step/config/ca.json || true; tail -f /dev/null"
+          #    command: >
+          #      sh -c "
+          #      step-ca /home/step/config/ca.json
+          #     "
+    healthcheck:
+      test: ["CMD", "step", "ca", "health", "--ca-url", "https://stepca-ra-one.local:9100", "--root", "./certs/intermediate_ca.crt"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  config-volume:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./persistent/root/config
+
+  certs-volume:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./persistent/root/certs
+
+  secrets-volume:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./persistent/root/secrets
+
+  init-script:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./scripts/init-root-new.sh
+
+  intermediate-certs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./persistent/intermediate/certs
+
+  intermediate-config:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./persistent/intermediate/config
+
+  intermediate-secrets:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./persistent/intermediate/secrets
+
+  ra1-config:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./persistent/ra/ra-one/config
+
+  ra1-certs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./persistent/ra/ra-one/certs
+
+  ra1-secrets:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./persistent/ra/ra-one/secrets
+
+  ra1-db:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./persistent/ra/ra-one/db
+
+  ra1-tmp:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./persistent/tmp
+
+  intermediate-tmp:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./persistent/tmp/
+
+secrets:
+  root_ca_password:
+    file: ./secrets/root_ca_password.txt
+  intermediate_ca_password:
+    file: ./secrets/intermediate_ca_password.txt
+  ra_password:
+    file: ./secrets/ra_password.txt
+  admin_password:
+    file: ./secrets/admin_password.txt

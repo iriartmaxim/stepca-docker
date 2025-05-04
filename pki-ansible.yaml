@@ -1,0 +1,360 @@
+- name: Despliegue de PKI con StepCA
+  hosts: localhost
+  vars:
+    docker_compose_dir: /root/stepca/stepca-try1
+    stepca_containers:
+      - stepca-root
+      - stepca-intermediate
+      - stepca-ra-one.local
+    stepca_volumes:
+      - stepca_default
+      - stepca_config-volume
+      - stepca_certs-volume
+      - stepca_secrets-volume
+      - stepca_init-intermediate-script
+      - stepca_rootca-crt
+      - stepca_intermediate-config
+      - stepca_intermediate-certs
+      - stepca_intermediate-secrets
+      - stepca_intermediate-tmp
+      - stepca_ra1-config
+      - stepca_ra1-certs
+      - stepca_ra1-secrets
+      - stepca_ra1-db
+      - stepca_ra1-tmp
+  tasks:
+    # ---------------------------------------------------------------------
+    # CLEANUP: Derribar y borrar todo para un entorno limpio
+    # ---------------------------------------------------------------------
+    - name: Detener y bajar el stack completo
+      command: docker compose down --remove-orphans
+      args:
+        chdir: "{{ docker_compose_dir }}"
+      ignore_errors: true
+
+    - name: Eliminar contenedores stepca-* activos o parados
+      shell: |
+        docker rm -f $(docker ps -aq --filter "name={{ item }}") || true
+      loop: "{{ stepca_containers }}"
+      changed_when: false
+
+    - name: Obtener lista de volúmenes Docker de StepCA
+      shell: docker volume ls -q --filter "name=^stepca-"
+      register: stepca_docker_volumes
+      changed_when: false
+
+    - name: Eliminar volúmenes StepCA dinámicamente
+      community.docker.docker_volume:
+        name: "{{ item }}"
+        state: absent
+      loop: "{{ stepca_docker_volumes.stdout_lines }}"
+      when: stepca_docker_volumes.stdout_lines | length > 0
+
+    - name: Eliminar directorio 'persistent' si existe
+      file:
+        path: "{{ docker_compose_dir }}/persistent"
+        state: absent
+
+    # ---------------------------------------------------------------------
+    # CREACIÓN ESTRUCTURA
+    # ---------------------------------------------------------------------
+    - name: Crear estructura de carpetas requeridas
+      file:
+        path: "{{ docker_compose_dir }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - persistent/root/config
+        - persistent/root/certs
+        - persistent/root/secrets
+        - persistent/intermediate/config
+        - persistent/intermediate/certs
+        - persistent/intermediate/secrets
+        - persistent/tmp
+        - scripts
+        - secrets
+
+    # ---------------------------------------------------------------------
+    # Permisos y copias
+    # ---------------------------------------------------------------------
+
+    - name: Crear archivos de contraseña para secretos
+      copy:
+        content: "changeme"
+        dest: "{{ docker_compose_dir }}/secrets/{{ item }}"
+        mode: '0777'
+      loop:
+        - root_ca_password.txt
+        - intermediate_ca_password.txt
+        - ra_password.txt
+        - admin_password.txt
+
+    - name: Dar permisos 777 a persistent
+      file:
+        path: "{{ docker_compose_dir }}/persistent"
+        state: directory
+        mode: '0777'
+        recurse: yes
+
+    - name: Dar permisos 777 a scripts
+      file:
+        path: "{{ docker_compose_dir }}/scripts"
+        state: directory
+        mode: '0777'
+        recurse: yes
+
+    # ---------------------------------------------------------------------
+    # DESPLIEGUE ROOT CA
+    # ---------------------------------------------------------------------
+    - name: Levantar solo la Root CA primero
+      command: docker compose up -d stepca-root
+      args:
+        chdir: "{{ docker_compose_dir }}"
+
+    - name: Esperar a Root CA (puerto 9000)
+      uri:
+        url: "https://localhost:9000/health"
+        method: GET
+        validate_certs: false
+        status_code: 200
+      register: root_check
+      until: root_check.status == 200
+      retries: 20
+      delay: 5
+
+    # ---------------------------------------------------------------------
+    # DESPLIEGUE INTERMEDIATE CA
+    # ---------------------------------------------------------------------
+
+    - name: Esperar a que Root CA genere el certificado intermedio
+      shell: docker exec stepca-root test -f /home/step/intermediate_tmp/certs/intermediate.crt
+      register: wait_cert
+      retries: 20
+      delay: 5
+      until: wait_cert.rc == 0
+
+    - name: Esperar a que Root CA genere la clave intermedia
+      shell: docker exec stepca-root test -f /home/step/intermediate_tmp/secrets/intermediate_ca_key
+      register: wait_key
+      retries: 20
+      delay: 5
+      until: wait_key.rc == 0
+
+
+   # Copiar certificado y clave intermedia existentes
+    - name: Copiar certificado intermedio existente
+      copy:
+        src: "/root/stepca/stepca-try1/persistent/root/certs/intermediate_ca.crt"
+        dest: "{{ docker_compose_dir }}/persistent/intermediate/certs/intermediate_ca.crt"
+        mode: '0644'
+    - name: Copiar clave intermedia existente
+      copy:
+        src: "/root/stepca/stepca-try1/persistent/root/secrets/intermediate_ca_key"
+        dest: "{{ docker_compose_dir }}/persistent/intermediate/secrets/intermediate_ca_key"
+        mode: '0600'
+
+
+    - name: Fijar propietario y permisos de la clave intermedia
+      file:
+        path: "{{ docker_compose_dir }}/persistent/intermediate/secrets/intermediate_ca_key"
+        owner: 1000
+        group: 1000
+        mode: "0600"
+
+    - name: Fijar propietario y permisos del certificado intermedio
+      file:
+        path: "{{ docker_compose_dir }}/persistent/intermediate/certs/intermediate_ca.crt"
+        owner: 1000
+        group: 1000
+        mode: "0644"
+
+
+    # ---------------------------------------------------------------------
+    # CREAR CONFIG PARA INTERMEDIATE CA
+    # ---------------------------------------------------------------------
+    - name: Crear ca.json para la CA Intermedia
+      copy:
+        dest: "{{ docker_compose_dir }}/persistent/intermediate/config/ca.json"
+        mode: '0644'
+        owner: 1000
+        group: 1000
+        content: |-
+          {
+            "root": "/home/step/certs/root_ca.crt",
+            "crt":  "/home/step/certs/intermediate_ca.crt",
+            "key":  "/home/step/secrets/intermediate_ca_key",
+            "address": ":9000",
+            "dnsNames": ["stepca-intermediate","localhost"],
+            "logger": {"format": "text"},
+            "db": {"type": "badgerv2", "dataSource": "/home/step/db"},
+            "authority": {
+              "enableAdmin": true,
+              "disableIssuedAtCheck": false,
+              "claims": {
+                "minTLSCertDuration": "5m",
+                "maxTLSCertDuration": "24h",
+                "defaultTLSCertDuration": "24h"
+              },
+              "policy": {
+                "x509": {"allow": {"dns": ["*.local"]}, "allowWildcardNames": false}
+              },
+              "provisioners": []
+            }
+          }
+
+
+
+    - name: Levantar la CA Intermedia
+      command: docker compose up -d stepca-intermediate
+      args:
+        chdir: "{{ docker_compose_dir }}"
+
+    - name: Esperar a Intermediate CA (puerto 9001)
+      uri:
+        url: "https://localhost:9001/health"
+        method: GET
+        validate_certs: false
+        status_code: 200
+      register: int_check
+      until: int_check.status == 200
+      retries: 20
+      delay: 5
+
+
+    # ---------------------------------------------------------------------
+    # DESPLIEGUE RA
+    # ---------------------------------------------------------------------
+
+   # ---------------------------------------------------------------------
+    # DESPLIEGUE RA (Registration Authority)
+    # ---------------------------------------------------------------------
+    - name: Crear carpetas para RA-one
+      file:
+        path: "{{ docker_compose_dir }}/persistent/ra/ra-one/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - config
+        - secrets
+        - db
+        - certs
+
+
+    - name: Obtener fingerprint de la CA intermedia
+      command: >
+        step certificate fingerprint {{ docker_compose_dir }}/persistent/root/certs/root_ca.crt --format hex
+      register: intermediate_fp
+      changed_when: false
+
+    - name: Establecer variable intermediate_fingerprint
+      set_fact:
+        intermediate_fingerprint: "{{ intermediate_fp.stdout }}"
+    
+    - name: Copiar ca.json de configuración para RA-one
+      copy:
+       dest: "{{ docker_compose_dir }}/persistent/ra/ra-one/config/ca.json"
+       mode: '0644'
+       content: |-
+          {
+            "address": ":9100",
+            "dnsNames": ["stepca-ra-one.local"],
+            "db": {"type":"badgerV2","dataSource":"/home/step/db"},
+            "logger":{"format":"text"},
+            "authority":{
+              "type":"stepcas",
+              "certificateAuthority":"https://stepca-intermediate:9000",
+              "certificateAuthorityFingerprint":"{{ intermediate_fingerprint }}",
+              "certificateIssuer":{
+                "type":"jwk",
+                "provisioner":"ra_jwk",
+                "key":"/home/step/secrets/ra.key.pem"
+              },
+              "provisioners":[{"type":"ACME","name":"acme"}]
+            },
+            "tls":{"cipherSuites":["TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305","TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"],"minVersion":1.2,"maxVersion":1.3,"renegotiation":false}
+          }
+
+
+
+
+
+
+
+    # ---------------------------------------------------------------------
+    # Generar JWK y desplegar Registration Authority
+    # ---------------------------------------------------------------------
+    - name: Generar provisioner JWK para RA en la Intermediate CA
+      command: >
+        docker exec stepca-intermediate \
+          step ca provisioner add ra_jwk \
+            --type JWK \
+            --create \
+            --password-file /run/secrets/subca_password \
+            --ca-url https://stepca-intermediate:9000/ \
+            --admin-subject="step"
+      register: gen_ra_jwk
+      changed_when: "'✔ Provisioner:' in gen_ra_jwk.stdout"
+
+
+    - name: Reiniciar servicio de step ca intermedia
+      command: docker exec stepca-intermediate kill -1 1
+
+
+    # ---------------------------------------------------------------------
+    #  Generación y protección de la clave JWK para la RA mediante script
+    # ---------------------------------------------------------------------
+    - name: Asegurar que el script key_ra.sh es ejecutable
+      file:
+        path: "{{ playbook_dir }}/local_scripts/key_ra.sh"
+        mode: '0755'
+      delegate_to: localhost
+
+    - name: Ejecutar script para generar ra.key.pem y ra_password
+      command: bash local_scripts/key_ra.sh
+
+
+    - name: Verificar que ra.key.pem y ra_password existen
+      stat:
+        path: "{{ docker_compose_dir }}/persistent/ra/ra-one/secrets/{{ item }}"
+      loop:
+        - ra.key.pem
+        - ra_password
+      register: ra_secrets
+
+    - name: Ajustar permisos de la clave y contraseña de RA
+      file:
+        path: "{{ docker_compose_dir }}/persistent/ra/ra-one/secrets/{{ item.name }}"
+        owner: 1000
+        group: 1000
+        mode: "{{ item.mode }}"
+      loop:
+        - { name: ra.key.pem, mode: '0600' }
+  # Copiar certificado de la intermedia y fijar permisos
+    - name: Copiar certificado intermedio existente
+      copy:
+        src: "/root/stepca/stepca-try1/persistent/root/certs/intermediate_ca.crt"
+        dest: "{{ docker_compose_dir }}/persistent/ra/ra-one/certs/intermediate_ca.crt"
+        mode: '0644'
+
+    - name: Fijar propietario y permisos del certificado intermedio
+      file:
+        path: "{{ docker_compose_dir }}/persistent/ra/ra-one/certs/intermediate_ca.crt"
+        owner: 1000
+        group: 1000
+        mode: "0644"
+
+    - name: Levantar la Registration Authority
+      command: docker compose up -d stepca-ra-one.local
+      args:
+        chdir: "{{ docker_compose_dir }}"
+
+    - name: Esperar a RA (puerto 9100)
+      uri:
+        url: "https://localhost:9100/health"
+        method: GET
+        validate_certs: false
+        status_code: 200
+      register: ra_check
+      until: ra_check.status == 200
+      retries: 20
+      delay: 5

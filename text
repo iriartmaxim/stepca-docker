@@ -1,0 +1,50 @@
+[
+   {
+      "type": "JWK",
+      "name": "Admin JWK",
+      "key": {
+         "use": "sig",
+         "kty": "EC",
+         "kid": "NYDVfK2q6Pmh--JZeOGxeU7ydXPK8UlyBrWRWNBEL84",
+         "crv": "P-256",
+         "alg": "ES256",
+         "x": "wOZbAEyr1AOiI5vnQ4x8CnID6xu8nCoKx7sxBAOJSn8",
+         "y": "0OzlqNOLplSKQFoXWMIzQeJH22-4gTY5o-nK5shECmE"
+      },
+      "encryptedKey": "eyJhbGciOiJQQkVTMi1IUzI1NitBMTI4S1ciLCJjdHkiOiJqd2sranNvbiIsImVuYyI6IkEyNTZHQ00iLCJwMmMiOjYwMDAwMCwicDJzIjoicDhKYl9BdFE3X3RHeGpyQTB3ZW41QSJ9.LYidnIaq-vbV_7vfqoQGUXnwUCvwrzPzNqcddss24-4AYPCLmj7tTw.COb5Dkba7XnPuHSs.R7zJ6wWPJISQebQ-TAlOcsUgPvMNzgs6tlef3S33aZTJnq0t1KEyaguABt_-Tj5cxY8cZWH-PH7hHsXs9R8rGqoLlM5X6r0ay7jG7z0hDvSMGETAm8Del_bMS28x1kYTgqtxFJwRCkZP4pAPGTkYoYvG4XUGEjtlCigKFFM0Q2qimcoFgqWMEIcD5LO-Ln1P4dttaXrFqHaRVZb7axPHxsL5KBIbEVpKBCh0kUTIdAPlI2YUF_PerQyFZWGcOBnhObCb6e47r0Pe7c_aPYp9-nC3s6Nf3XWvOeX10bp2B3Uvu23jDRVkj4i3mp6C3sjSBR3P5R4WBwuvi7V0zLE.mmoPzItsgp2JsJ3MF7jNhw",
+      "claims": {
+         "defaultTLSCertDuration": "5m0s",
+         "disableRenewal": false,
+         "allowRenewalAfterExpiry": false,
+         "disableSmallstepExtensions": false
+      },
+      "options": {
+         "x509": {},
+         "ssh": {}
+      }
+   },
+   {
+      "type": "JWK",
+      "name": "ra_jwk",
+      "key": {
+         "use": "sig",
+         "kty": "EC",
+         "kid": "IH2wNkWLm6WQo9VgrtjcTBgjLLB3XEO7mbbDjcCoeG8",
+         "crv": "P-256",
+         "alg": "ES256",
+         "x": "JQ-jR9uOFvMgMAqpfnVK0MQnT2rF-WTVV9jSPSbFqGI",
+         "y": "Kz6ZgsAeGzhFLTaNYzN5IQkZr-_SDukZ-ihcLqpiDYA"
+      },
+      "encryptedKey": "eyJhbGciOiJQQkVTMi1IUzI1NitBMTI4S1ciLCJjdHkiOiJqd2sranNvbiIsImVuYyI6IkEyNTZHQ00iLCJwMmMiOjYwMDAwMCwicDJzIjoiQ2txZ0c2QjVhdVJnaUFsdnR3SlI5ZyJ9.sU0Kr5pDTtyqtF90AcxV4ehwgFdH_cm41MXnpxR5G1kjEAUKPkNIPQ.ZPc-x0n1fiwoT2AN.UHi_Sz0cUA5q50eWeFzLdaw5DC_5ZiaDc-iXwFyIQtrVIguM_BV5jFHyvvdqjCJXEhk8l6TAdU1nPXoblMKvyM7NNWs-GhgdXFau8EbGg36xzr0tRJmt_AeK8ecOFDiaaKgyNDQyJtOmIT3BZMA2kj6ITjjchGh4EJCU4Trr8FTuz1GfV87TPS-9kVPJ6qaDZ6nx6ycccwA-YaC97bRAfkk-CodDeDy1V7O6MXYpi1n8STvUosdt3dSgpnEcwniNxIz8K0j7nIt6vkUMBq11PLZpMVpECNCR4L67Ntagi_p07fA3pU-t9vqYwZy5zize_4Owb9ZvL5HyKH7FJo0.8ZtYEcZoKaqZes6zrUGoGQ",
+      "claims": {
+         "enableSSHCA": true,
+         "disableRenewal": false,
+         "allowRenewalAfterExpiry": false,
+         "disableSmallstepExtensions": false
+      },
+      "options": {
+         "x509": {},
+         "ssh": {}
+      }
+   }
+]
