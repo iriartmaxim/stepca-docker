@@ -41,6 +41,15 @@ for _k, _v in os.environ.items():
         _label, _url, _pw = _v.split("|")
         ISSUERS[_k[len("ISSUER_"):].lower()] = {"label": _label, "ca_url": _url, "pw_file": _pw}
 
+# RAs adicionales (una por intermedia con RA opcional): env RA_<ID>=label|url
+# (lo agrega scripts/add-ra.sh). Sólo para el tablero Estado (health), no emiten desde la UI.
+EXTRA_RAS = []
+for _k, _v in os.environ.items():
+    if _k.startswith("RA_") and _v.count("|") == 1:
+        _label, _url = _v.split("|")
+        EXTRA_RAS.append({"name": _label, "label": _label, "url": _url,
+                          "host_port": None, "role": "ra"})
+
 
 def issue_enabled():
     return bool(UI_TOKEN) and os.path.exists(WEB_PW_FILE)
@@ -119,6 +128,7 @@ async def status():
             continue
         targets.append({"name": v["label"], "label": v["label"], "url": v["ca_url"],
                         "host_port": None, "role": "intermediate"})
+    targets += EXTRA_RAS
     out = []
     for ca in targets:
         healthy = False

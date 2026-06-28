@@ -16,7 +16,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"; cd "${ROOT_DIR}"
 SPOOL="persistent/ui/spool"
 mkdir -p "${SPOOL}"
 
-overlays(){ local o=""; for f in compose.int-*.yaml; do [ -e "$f" ] && o="$o -f $f"; done; echo "$o"; }
+overlays(){ local o=""; for f in compose.int-*.yaml compose.ra-*.yaml; do [ -e "$f" ] && o="$o -f $f"; done; echo "$o"; }
 
 deploy_one(){
   local reqf="$1" id name port with_ra
@@ -26,11 +26,19 @@ deploy_one(){
   with_ra="$(python -c 'import json,sys;print(json.load(open(sys.argv[1])).get("with_ra",False))' "$reqf")"
   local work="${SPOOL}/${id}.working.json"; mv -f "$reqf" "$work"
   echo "▶ Desplegando intermedia '${id}' (${name}) puerto ${port}…"
-  local detail=""
-  if bash scripts/add-intermediate.sh "$id" "$name" "$port" \
-       && docker compose -f compose.yaml $(overlays) up -d "stepca-int-${id}" \
-       && docker compose -f compose.yaml $(overlays) up -d stepca-ui; then
-    [ "$with_ra" = "True" ] && detail="intermedia OK · RA opcional: aún no automatizada (queda como follow-up)"
+  local detail="" ok=1
+  bash scripts/add-intermediate.sh "$id" "$name" "$port" \
+    && docker compose -f compose.yaml $(overlays) up -d "stepca-int-${id}" || ok=0
+  if [ "$ok" = 1 ] && [ "$with_ra" = "True" ]; then
+    echo "▶ Desplegando RA opcional para '${id}'…"
+    if bash scripts/add-ra.sh "$id" "$((port+100))" \
+         && docker compose -f compose.yaml $(overlays) up -d "stepca-ra-${id}"; then
+      detail="intermedia + RA desplegadas y registradas en la UI"
+    else
+      detail="intermedia OK; la RA opcional falló (ver logs)"
+    fi
+  fi
+  if [ "$ok" = 1 ] && docker compose -f compose.yaml $(overlays) up -d stepca-ui; then
     detail="${detail:-desplegada y registrada en la UI}"
     python -c 'import json,sys;d=json.load(open(sys.argv[1]));d["detail"]=sys.argv[2];json.dump(d,open(sys.argv[3],"w"))' \
       "$work" "$detail" "${SPOOL}/${id}.done.json"
