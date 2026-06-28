@@ -75,9 +75,9 @@ def _thresholds():
 
 # Servicios de la PKI (etiqueta, URL interna de health)
 CAS = [
-    {"name": "stepca-root", "label": "Root CA", "url": "https://stepca-root:9000", "host_port": 9000},
-    {"name": "stepca-intermediate", "label": "Intermediate CA", "url": "https://stepca-intermediate:9000", "host_port": 9001},
-    {"name": "stepca-ra-one.local", "label": "Registration Authority", "url": "https://stepca-ra-one.local:9100", "host_port": 9100},
+    {"name": "stepca-root", "label": "Root CA", "url": "https://stepca-root:9000", "host_port": 9000, "role": "root"},
+    {"name": "stepca-intermediate", "label": "Intermediate CA", "url": "https://stepca-intermediate:9000", "host_port": 9001, "role": "intermediate"},
+    {"name": "stepca-ra-one.local", "label": "Registration Authority", "url": "https://stepca-ra-one.local:9100", "host_port": 9100, "role": "ra"},
 ]
 
 app = FastAPI(title="stepca-ui")
@@ -112,15 +112,22 @@ def index():
 
 @app.get("/api/status")
 async def status():
+    # Base (root, intermedia principal, RA) + intermedias adicionales (issuers != default)
+    targets = list(CAS)
+    for iid, v in ISSUERS.items():
+        if iid == "default":
+            continue
+        targets.append({"name": v["label"], "label": v["label"], "url": v["ca_url"],
+                        "host_port": None, "role": "intermediate"})
     out = []
-    for ca in CAS:
+    for ca in targets:
         healthy = False
         try:
             j = await _get(ca["url"], "/health")
             healthy = j.get("status") == "ok"
         except Exception:
             healthy = False
-        out.append({"name": ca["name"], "label": ca["label"],
+        out.append({"name": ca["name"], "label": ca["label"], "role": ca.get("role", "intermediate"),
                     "host_port": ca["host_port"], "healthy": healthy})
     return out
 
@@ -143,13 +150,15 @@ def _inspect(path):
 @app.get("/api/cas")
 def cas():
     out = []
-    for label, path in [("Root CA", ROOT_CRT), ("Intermediate CA", INT_CRT)]:
+    for label, path, role in [("Root CA", ROOT_CRT, "root"),
+                              ("Intermediate CA", INT_CRT, "intermediate")]:
         try:
             info = _inspect(path)
             info["label"] = label
+            info["role"] = role
             out.append(info)
         except Exception as e:
-            out.append({"label": label, "error": str(e)})
+            out.append({"label": label, "role": role, "error": str(e)})
     return out
 
 

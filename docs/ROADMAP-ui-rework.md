@@ -10,8 +10,8 @@ Estado: ⬜ pendiente · 🚧 en curso · ✅ hecho. Cada avance: commit en main
 4. ✅ **Quitar Operaciones** por completo (nav + sección + JS + endpoints).
 5. ⬜ **Agregar intermedias**: autodesplegar un step-ca más (+ RA opcional) y que aparezca
    solo en el tablero Estado.
-6. ⬜ **Estado**: separar Roots / Intermedias / RAs.
-7. ⬜ **CAs**: separar en dos cajas distintas Roots e Intermedias.
+6. ✅ **Estado**: separar Roots / Intermedias / RAs (incluye intermedias adicionales).
+7. ✅ **CAs**: dos cajas distintas (Roots / Intermedias).
 8. ⬜ **Provisioners**: soportar más tipos + (?) por campo (qué es y cómo completarlo).
 
 ## Notas de diseño
@@ -23,3 +23,4 @@ Estado: ⬜ pendiente · 🚧 en curso · ✅ hecho. Cada avance: commit en main
 ## Bitácora
 - (init) Roadmap creado; arranque por #4.
 - #4 ✅ Operaciones eliminado (nav/sección/JS/endpoints).
+- #6+#7 ✅ Estado por rol (Roots/Intermedias/RAs) y CAs en dos cajas; /api/status y /api/cas devuelven role.

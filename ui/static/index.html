@@ -81,7 +81,9 @@
   <main>
     <!-- ESTADO -->
     <section id="sec-estado" class="active">
-      <div class="card"><h2>CAs</h2><div id="status" class="grid"></div></div>
+      <div class="card"><h2>Roots</h2><div id="status-root" class="grid"></div></div>
+      <div class="card"><h2>Intermedias</h2><div id="status-intermediate" class="grid"></div></div>
+      <div class="card"><h2>Autoridades de Registro (RA)</h2><div id="status-ra" class="grid"></div></div>
       <div class="card"><h2>Réplicas · balanceador (HAProxy)</h2>
         <table id="hap"><thead><tr><th>Backend</th><th>Servidor</th><th>Estado</th></tr></thead><tbody></tbody></table>
         <div id="hap-msg" class="muted" style="font-size:12px"></div>
@@ -99,9 +101,12 @@
 
     <!-- CAs -->
     <section id="sec-cas">
-      <div class="card"><h2>Certificados de las CAs</h2>
-        <div id="cas" class="grid"></div>
+      <div class="card"><h2>Roots</h2>
+        <div id="cas-root" class="grid"></div>
         <div style="margin-top:12px"><a href="/api/root.crt"><button class="ghost">⬇ Descargar root_ca.crt</button></a></div>
+      </div>
+      <div class="card"><h2>Intermedias</h2>
+        <div id="cas-intermediate" class="grid"></div>
       </div>
     </section>
 
@@ -311,8 +316,12 @@ async function loadCompliance(){
 
 async function loadStatus(){
   const d = await j('/api/status');
-  $('#status').innerHTML = d.map(c=>`<div class="ca"><div class="name"><span class="dot ${c.healthy?'ok':'bad'}"></span>${c.label}</div>
-    <div class="meta">${c.name}<br>puerto host :${c.host_port} · ${c.healthy?'healthy':'caído'}</div></div>`).join('');
+  const card=c=>`<div class="ca"><div class="name"><span class="dot ${c.healthy?'ok':'bad'}"></span>${c.label}</div>
+    <div class="meta">${c.name}<br>${c.host_port?('puerto host :'+c.host_port+' · '):''}${c.healthy?'healthy':'caído'}</div></div>`;
+  ['root','intermediate','ra'].forEach(role=>{
+    const items=d.filter(c=>c.role===role);
+    $('#status-'+role).innerHTML = items.length? items.map(card).join('') : '<span class="muted">—</span>';
+  });
   $('#overall').className='dot '+(d.every(c=>c.healthy)?'ok':(d.some(c=>c.healthy)?'warn':'bad'));
 }
 function kv(o){ return Object.entries(o).map(([k,v])=>`<tr><td class="muted">${k}</td><td>${v==null?'—':(typeof v==='object'?JSON.stringify(v):v)}</td></tr>`).join(''); }
@@ -426,11 +435,15 @@ async function loadPg(){
 }
 async function loadCas(){
   const d = await j('/api/cas');
-  $('#cas').innerHTML = d.map(c=> c.error?`<div class="ca"><div class="name">${c.label}</div><div class="meta">${c.error}</div></div>`:`
+  const card=c=> c.error?`<div class="ca"><div class="name">${c.label}</div><div class="meta">${c.error}</div></div>`:`
     <div class="ca"><div class="name">${c.label}</div><div class="meta">
       <b>Subject:</b> ${c.subject}<br><b>Issuer:</b> ${c.issuer}<br>
       <b>Vence:</b> ${c.not_after.slice(0,10)} (${c.days_left} días)<br>
-      <b>SHA256:</b> <code>${c.fingerprint.slice(0,29)}…</code></div></div>`).join('');
+      <b>SHA256:</b> <code>${c.fingerprint.slice(0,29)}…</code></div></div>`;
+  ['root','intermediate'].forEach(role=>{
+    const items=d.filter(c=>c.role===role);
+    $('#cas-'+role).innerHTML = items.length? items.map(card).join('') : '<span class="muted">—</span>';
+  });
 }
 const PROTECTED=['web','ra_jwk'];
 let ADMIN=false;
