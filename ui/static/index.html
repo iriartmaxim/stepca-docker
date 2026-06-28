@@ -115,6 +115,7 @@
         </div>
         <div id="issue-form">
           <div class="row">
+            <div><label>CA emisora</label><select id="i-issuer"></select></div>
             <div><label>Nombre (CN) · *.local</label><input id="i-domain" value="miapp.local"></div>
             <div><label>Perfil de uso</label><select id="i-profile"></select></div>
           </div>
@@ -274,7 +275,7 @@ async function issue(){
   try{
     const r=await fetch('/api/issue',{method:'POST',
       headers:{'Content-Type':'application/json','X-Auth-Token':$('#i-token').value},
-      body:JSON.stringify({domain:$('#i-domain').value,profile:$('#i-profile').value,
+      body:JSON.stringify({domain:$('#i-domain').value,issuer:$('#i-issuer').value,profile:$('#i-profile').value,
         key_type:$('#i-kty').value,key_param:$('#i-kparam').value,sans})});
     if(!r.ok){out.textContent='❌ '+(await r.text());return;}
     const d=await r.json();
@@ -301,11 +302,14 @@ function dl(kind){
 }
 
 async function init(){
-  // perfiles y tipos de clave
+  // perfiles, tipos de clave y CAs emisoras
   try{const pf=await j('/api/profiles');
     KEYTYPES=pf.key_types;
     $('#i-profile').innerHTML=Object.entries(pf.profiles).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
     fillKty('i'); fillKty('c');
+  }catch(e){}
+  try{const iss=await j('/api/issuers');
+    $('#i-issuer').innerHTML=iss.map(i=>`<option value="${i.id}">${i.label}</option>`).join('');
   }catch(e){}
   // emisión / gestión habilitada?
   let issueOn=false;

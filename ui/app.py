@@ -29,6 +29,15 @@ WEB_PW_FILE = os.environ.get("WEB_PROVISIONER_PW_FILE", "/run/secrets/web_provis
 UI_TOKEN = os.environ.get("UI_TOKEN", "")
 INT_CA_URL = os.environ.get("INT_CA_URL", "https://stepca-intermediate:9000")
 
+# Registro de CAs emisoras (multi-intermediate). 'default' = la intermedia principal.
+# Cada intermedia adicional se declara con un env ISSUER_<ID>=label|ca_url|pw_file
+# (lo agrega scripts/add-intermediate.sh en su overlay).
+ISSUERS = {"default": {"label": "Intermediate (principal)", "ca_url": INT_CA_URL, "pw_file": WEB_PW_FILE}}
+for _k, _v in os.environ.items():
+    if _k.startswith("ISSUER_") and _v.count("|") == 2:
+        _label, _url, _pw = _v.split("|")
+        ISSUERS[_k[len("ISSUER_"):].lower()] = {"label": _label, "ca_url": _url, "pw_file": _pw}
+
 
 def issue_enabled():
     return bool(UI_TOKEN) and os.path.exists(WEB_PW_FILE)
@@ -50,6 +59,12 @@ DOMAIN_RE = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+lo
 @app.get("/api/config")
 def config():
     return {"issue_enabled": issue_enabled()}
+
+
+@app.get("/api/issuers")
+def issuers():
+    return [{"id": k, "label": v["label"]}
+            for k, v in ISSUERS.items() if os.path.exists(v["pw_file"])]
 
 
 async def _get(url, path):
@@ -223,6 +238,7 @@ def profiles():
 
 class IssueReq(BaseModel):
     domain: str
+    issuer: str = "default"    # CA emisora (multi-intermediate)
     profile: str = "tls-server"
     key_type: str = "EC"
     key_param: str = "P-256"   # curva (EC) o tamaño (RSA)
@@ -257,6 +273,9 @@ def issue(req: IssueReq, x_auth_token: str = Header(default="")):
         raise HTTPException(400, "Nombre inválido: se permite sólo un hostname *.local")
     if req.profile not in PROFILES:
         raise HTTPException(400, "Perfil inválido")
+    iss = ISSUERS.get(req.issuer)
+    if not iss or not os.path.exists(iss["pw_file"]):
+        raise HTTPException(400, "CA emisora inválida")
     sans = [s.strip().lower() for s in req.sans if s.strip()]
     for s in sans:
         if not DOMAIN_RE.match(s):
@@ -264,8 +283,8 @@ def issue(req: IssueReq, x_auth_token: str = Header(default="")):
     with tempfile.TemporaryDirectory() as td:
         crt, key = os.path.join(td, "d.crt"), os.path.join(td, "d.key")
         cmd = ["step", "ca", "certificate", domain, crt, key,
-               "--provisioner", "web", "--provisioner-password-file", WEB_PW_FILE,
-               "--ca-url", INT_CA_URL, "--root", ROOT_CRT, "--force",
+               "--provisioner", "web", "--provisioner-password-file", iss["pw_file"],
+               "--ca-url", iss["ca_url"], "--root", ROOT_CRT, "--force",
                "--set", f"profile={req.profile}"]
         cmd += _key_flags(req.key_type, req.key_param)
         for s in sans:

@@ -1,0 +1,31 @@
+# Intermedia adicional 'b'. Uso:
+#   docker compose -f compose.yaml -f compose.int-b.yaml up -d stepca-int-b
+services:
+  stepca-int-b:
+    image: smallstep/step-ca:0.28.3
+    container_name: stepca-int-b
+    restart: unless-stopped
+    depends_on: { pg-primary: { condition: service_healthy } }
+    secrets: [ { source: intermediate_ca_password, target: subca_password } ]
+    networks:
+      default:
+        aliases: [ "stepca-intermediate-b" ]
+    volumes:
+      - ./persistent/intermediate-b/certs:/home/step/certs
+      - ./persistent/intermediate-b/config:/home/step/config
+      - ./persistent/intermediate-b/secrets:/home/step/secrets
+      - ./infra/stepca/templates:/home/step/templates:ro
+    command: sh -c "step-ca --password-file=/run/secrets/subca_password /home/step/config/ca.json"
+    healthcheck:
+      test: ["CMD","step","ca","health","--ca-url","https://localhost:9000"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    ports: [ "9002:9000" ]
+
+  # Registra esta intermedia como CA emisora en la UI
+  stepca-ui:
+    environment:
+      ISSUER_B: "Intermediate B|https://stepca-intermediate-b:9000|/run/secrets/web_b"
+    volumes:
+      - ./persistent/intermediate-b/web_provisioner_password:/run/secrets/web_b:ro
