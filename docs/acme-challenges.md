@@ -67,8 +67,8 @@ resolver; el cliente lego publica el TXT con el hook `examples/acme/lego-exec.sh
 ```bash
 # Levanta CoreDNS, reconfigura la RA y emite el cert con dns-01
 examples/acme/demo-dns01.sh dnsdemo.test
-# Revertir la RA a su DNS normal al terminar:
-docker compose up -d --force-recreate stepca-ra-one.local
+# Revertir la RA a su DNS normal al terminar (ambas réplicas):
+docker compose up -d --force-recreate stepca-ra-1 stepca-ra-2
 ```
 
 > ⚠️ **Dos detalles aprendidos en este repo**:
