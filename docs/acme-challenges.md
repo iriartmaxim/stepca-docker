@@ -108,17 +108,27 @@ atestiguada por hardware. Formatos habilitados: `step` (agente), `tpm` (TPM 2.0)
 y `apple` (Secure Enclave / MDM). El SAN es un `permanentIdentifier` (p. ej. el
 serial del dispositivo), no un DNS.
 
-El scaffold con TPM por software (swtpm) y el flujo completo están en
-[../examples/acme/demo-deviceattest01.sh](../examples/acme/demo-deviceattest01.sh):
+La infraestructura completa está en `examples/acme/deviceattest/` (imagen con
+**swtpm + tpm2-tools + step**) y el orquestador
+[../examples/acme/demo-deviceattest01.sh](../examples/acme/demo-deviceattest01.sh),
+que: construye la imagen, levanta el TPM emulado, **registra la raíz del EK del
+swtpm en `attestationRoots`** del provisioner `acme-device`, reinicia la RA y pide
+el certificado atestiguado.
 
 ```bash
-examples/acme/demo-deviceattest01.sh   # imprime el flujo y los requisitos
+examples/acme/demo-deviceattest01.sh
 ```
 
-> A diferencia de los otros 3, depende de **hardware de atestación** (o un emulador
-> swtpm) y de registrar la cadena del EK del TPM en `attestationRoots` del
-> provisioner. El provisioner ya está activo; falta la raíz de confianza del EK,
-> específica de cada TPM/fabricante.
+> **Requisito de entorno** — el cliente `step` (tpmkms) necesita un *archivo* de
+> dispositivo TPM (`/dev/tpmrm0` o `/dev/tpm0`); no acepta simuladores por socket.
+> Para emular sin hardware hace falta uno de:
+> - módulo kernel `tpm_vtpm_proxy` (aporta `/dev/vtpmx`) → `swtpm chardev --vtpm-proxy`
+> - `swtpm` compilado con CUSE → `swtpm cuse`
+> - un TPM real pasado al contenedor (`--device /dev/tpmrm0`)
+>
+> **Docker Desktop / WSL2 no trae vtpm-proxy ni CUSE**, así que en ese entorno el
+> demo se detiene con un mensaje claro tras configurar la RA. En un host Linux con
+> TPM real (o con `tpm_vtpm_proxy`), el mismo script completa la emisión.
 
 ---
 
@@ -129,7 +139,7 @@ examples/acme/demo-deviceattest01.sh   # imprime el flujo y los requisitos
 | http-01 | `acme-http` | ✅ cert emitido (`step --standalone`) |
 | dns-01 | `acme-dns` | ✅ validado con CoreDNS + lego (usar `.test`) |
 | tls-alpn-01 | `acme-tls` | ✅ cert emitido (lego `--tls`) |
-| device-attest-01 | `acme-device` | ⚙️ scaffold (requiere TPM/atestación) |
+| device-attest-01 | `acme-device` | ⚙️ infra completa (swtpm+step); requiere TPM/vtpm-proxy en el host |
 
 Infraestructura de demo: `compose.acme-demo.yaml` (CoreDNS) + `examples/acme/`
 (scripts y hooks). Cliente ACME usado: [lego](https://go-acme.github.io/lego/)
