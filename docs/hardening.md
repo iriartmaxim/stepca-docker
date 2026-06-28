@@ -89,11 +89,20 @@ Deshabilitá provisioners no usados y `disableRenewal:false` solo donde haga fal
 
 ## 5. Revocación (CRL / OCSP)
 
-Habilitá CRL en el `ca.json`:
+Habilitá CRL en el `ca.json` — el bloque va a **nivel raíz** del JSON (hermano de
+`authority`/`db`, **no** dentro de `authority`, o step-ca lo ignora):
 
 ```json
-"crl": { "enabled": true, "generateOnRevoke": true, "cacheDuration": "24h" }
+{
+  "db": { ... },
+  "crl": { "enabled": true, "generateOnRevoke": true, "cacheDuration": "12h" },
+  "authority": { ... }
+}
 ```
+
+> Ya viene habilitado por defecto en la intermedia principal (ver `scripts/bootstrap.sh`).
+> step-ca expone el CRL (DER) en `GET /crl`; la UI lo muestra y permite descargarlo
+> en **Inventario → Lista de revocación (CRL)**.
 
 Revocar un certificado:
 

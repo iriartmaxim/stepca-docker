@@ -675,6 +675,55 @@ def revoke(req: RevokeReq, x_auth_token: str = Header(default="")):
     return {"ok": True, "serial": serial, "output": out.strip()}
 
 
+def _fetch_crl(issuer):
+    iss = ISSUERS.get(issuer)
+    if not iss:
+        raise HTTPException(400, "CA emisora inválida")
+    url = iss["ca_url"].rstrip("/") + "/crl"
+    try:
+        with httpx.Client(verify=False, timeout=5) as c:
+            r = c.get(url)
+    except Exception as e:
+        raise HTTPException(502, "No se pudo contactar la CA: " + str(e)[:80])
+    if r.status_code != 200 or not r.content:
+        raise HTTPException(404, "CRL no disponible (¿CRL habilitado en esta CA?)")
+    return r.content
+
+
+@app.get("/api/crl")
+def crl_download(issuer: str = "default"):
+    """Descarga el CRL (DER) de la CA emisora elegida."""
+    return Response(_fetch_crl(issuer), media_type="application/pkix-crl",
+                    headers={"Content-Disposition": f"attachment; filename=crl-{issuer}.crl"})
+
+
+@app.get("/api/crl-info")
+def crl_info(issuer: str = "default"):
+    """Estado del CRL de una CA: habilitado, vigencia y seriales revocados."""
+    try:
+        data = _fetch_crl(issuer)
+    except HTTPException as e:
+        return {"enabled": False, "error": e.detail}
+    crl = x509.load_der_x509_crl(data)
+
+    def _iso(*names):
+        for n in names:
+            v = getattr(crl, n, None)
+            if v:
+                return v.isoformat()
+        return None
+
+    revoked = []
+    for r in crl:
+        rd = getattr(r, "revocation_date_utc", None) or getattr(r, "revocation_date", None)
+        revoked.append({"serial": format(r.serial_number, "x"),
+                        "revoked_at": rd.isoformat() if rd else None})
+    return {"enabled": True,
+            "this_update": _iso("last_update_utc", "last_update"),
+            "next_update": _iso("next_update_utc", "next_update"),
+            "count": len(revoked), "revoked": revoked[:300]}
+
+
 @app.delete("/api/provisioners/{name}")
 def remove_provisioner(name: str, issuer: str = "default", x_auth_token: str = Header(default="")):
     """Elimina un provisioner de la intermedia elegida (protege web y ra_jwk)."""

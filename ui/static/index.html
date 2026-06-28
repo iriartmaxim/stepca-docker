@@ -184,6 +184,13 @@
 
     <!-- INVENTARIO -->
     <section id="sec-inv">
+      <div class="card"><h2>Lista de revocación (CRL)</h2>
+        <div class="row" style="margin-bottom:8px;align-items:flex-end">
+          <div style="flex:0"><label>CA emisora</label><select id="crl-issuer" onchange="loadCrl()"></select></div>
+          <div style="flex:0"><label>&nbsp;</label><a id="crl-dl" href="#"><button class="ghost">⬇ Descargar CRL</button></a></div>
+        </div>
+        <div id="crl-info"></div>
+      </div>
       <div class="card"><h2>Certificados emitidos</h2>
         <div class="row" style="margin-bottom:8px"><a href="/api/certificates.csv"><button class="ghost">⬇ Exportar CSV</button></a></div>
         <div id="certsum" class="row" style="margin-bottom:12px"></div>
@@ -233,6 +240,7 @@ document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{
   b.classList.add('active');
   document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));
   $('#sec-'+b.dataset.sec).classList.add('active');
+  if(b.dataset.sec==='inv') loadCrl();
 });
 
 async function loadStatus(){
@@ -365,6 +373,23 @@ async function revokeCert(file){
     const d=await r.json(); alert('✅ Revocado (serial '+d.serial+')'); loadCerts();
   }catch(e){alert('❌ '+e.message);}
 }
+async function loadCrl(){
+  const iss=$('#crl-issuer').value||'default';
+  $('#crl-dl').href='/api/crl?issuer='+encodeURIComponent(iss);
+  const el=$('#crl-info'); el.innerHTML='<span class="muted">Cargando…</span>';
+  try{
+    const d=await j('/api/crl-info?issuer='+encodeURIComponent(iss));
+    if(!d.enabled){ el.innerHTML='<span class="muted">CRL no habilitado en esta CA'+(d.error?' ('+d.error+')':'')+'</span>'; return; }
+    let h='<table>'+kv({'Revocados':d.count,
+      'Última actualización':(d.this_update||'').replace('T',' ').slice(0,19),
+      'Próxima actualización':(d.next_update||'').replace('T',' ').slice(0,19)})+'</table>';
+    if(d.revoked&&d.revoked.length){
+      h+='<div style="margin-top:8px;max-height:220px;overflow:auto"><table><tr><th>Serial (hex)</th><th>Revocado</th></tr>'+
+        d.revoked.map(r=>`<tr><td><code>${r.serial}</code></td><td class="muted">${(r.revoked_at||'').replace('T',' ').slice(0,19)}</td></tr>`).join('')+'</table></div>';
+    } else { h+='<span class="muted">— sin certificados revocados —</span>'; }
+    el.innerHTML=h;
+  }catch(e){ el.innerHTML='<span class="muted">❌ '+e.message+'</span>'; }
+}
 async function certDetail(file){
   const out=$('#cert-detail'); out.style.display='block'; out.textContent='Cargando…';
   try{
@@ -468,7 +493,7 @@ async function init(){
   }catch(e){}
   try{const iss=await j('/api/issuers');
     const opts=iss.map(i=>`<option value="${i.id}">${i.label}</option>`).join('');
-    $('#i-issuer').innerHTML=opts; $('#p-issuer').innerHTML=opts;
+    $('#i-issuer').innerHTML=opts; $('#p-issuer').innerHTML=opts; $('#crl-issuer').innerHTML=opts;
   }catch(e){}
   // emisión / gestión habilitada?
   let issueOn=false;
@@ -482,7 +507,7 @@ async function init(){
     .map(c=>`<label style="display:flex;gap:4px;align-items:center;margin:0"><input type="checkbox" value="${c}" style="width:auto"> ${c}</label>`).join('');
   // carga inicial + refresh
   function tick(){loadStatus();loadCerts();loadHaproxy();loadPg();}
-  tick();loadCas();loadProvs();loadSettings();loadOps();
+  tick();loadCas();loadProvs();loadSettings();loadOps();loadCrl();
   setInterval(tick,5000);setInterval(loadProvs,15000);setInterval(loadSettings,30000);
 }
 init();

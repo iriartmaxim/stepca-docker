@@ -99,6 +99,7 @@ cat > "${INT_CFG}" <<EOF
   "dnsNames": ["stepca-intermediate","localhost"],
   "logger": {"format": "text"},
   "db": {"type": "postgresql", "dataSource": "${DSN_INT}"},
+  "crl": { "enabled": true, "generateOnRevoke": true, "cacheDuration": "12h" },
   "authority": {
     "enableAdmin": true,
     "claims": { "minTLSCertDuration": "5m", "maxTLSCertDuration": "24h", "defaultTLSCertDuration": "24h" },

@@ -1,0 +1,48 @@
+# ROADMAP — NIST hardening + features de PKI (todo gestionable desde la UI)
+
+Principio rector: **cada feature debe ser EJECUTABLE desde la UI** (como la revocación),
+no un comando copiable en "Operaciones". Sin socket de Docker para operaciones de PKI.
+
+Estado: ⬜ pendiente · 🚧 en curso · ✅ hecho.
+
+## Fase A — Cerrar brechas NIST (gap analysis previo)
+
+### A1. Revocación distribuida: CRL + OCSP  🚧
+- ✅ `crl` habilitado en la intermedia principal (top-level en ca.json + bootstrap.sh).
+  step-ca sirve el CRL (DER) en `GET /crl`; se regenera al revocar (`generateOnRevoke`).
+- ✅ UI: Inventario → "Lista de revocación (CRL)": estado, vigencia, lista de seriales
+  revocados y **descarga** del CRL, por CA emisora (/api/crl, /api/crl-info).
+- ⬜ Habilitar CRL también en intermedias adicionales (add/import-intermediate.sh).
+- ⬜ OCSP: evaluar responder (step-ca no trae OCSP nativo; opción CRL-only + doc).
+- NIST: 800-15 (repositorios), 800-57 (revocación), 800-53 SC-17.
+
+### A2. Custodia de claves: KMS/HSM + Root offline  ⬜
+- ⬜ UI: panel de estado de custodia (tipo de KMS por CA: software/pkcs11/cloud), warning si software.
+- ⬜ Soporte PKCS#11 opt-in vía env (documentado en hardening §2) + verificación desde la UI.
+- ⬜ UI: indicador "Root offline" (root detenida) y guía de ceremonia.
+
+### A3. Gobierno documental: CP/CPS + políticas  ⬜
+- ⬜ Plantilla CP/CPS (RFC 3647) versionada + link desde la UI.
+- ⬜ UI: editor de `policy.x509` / `policy.ssh` (allow/deny DNS, wildcard) vía Admin API.
+
+### A4. Auditoría y trazabilidad  ⬜
+- ⬜ UI: vista de eventos de CA (emisión/revocación/altas de provisioner) desde la DB.
+- ⬜ Exportar audit log (CSV/JSON) firmado.
+
+### A5. Endurecimiento de emisión  ⬜
+- ⬜ UI: edición de claims (duraciones min/max/default) por provisioner vía Admin API.
+- ⬜ UI: gestión de plantillas X509 (perfiles de emisión).
+
+## Fase B — Features de PKIs comerciales/OSS (research → implementar en UI)
+
+Catálogo a relevar (EJBCA, Smallstep Certificate Manager, HashiCorp Vault PKI,
+Microsoft ADCS, DigiCert, Venafi, OpenXPKI, Dogtag/FreeIPA, Keyfactor):
+- ⬜ Relevar features y puntearlas (docs/pki-feature-matrix.md).
+- ⬜ Priorizar las implementables sin socket y útiles, e integrarlas a la UI.
+
+(Candidatas típicas: dashboards de expiración, alertas de vencimiento, búsqueda/
+filtrado de certs, roles/RBAC, ACME EAB, plantillas/perfiles, SCEP/EST, bulk ops,
+notificaciones, reporting/compliance, API keys, multi-tenant, métricas.)
+
+## Bitácora
+- (init) Roadmap creado. Arranque por A1 (CRL).
