@@ -193,7 +193,15 @@
       </div>
       <div class="card"><h2>Certificados emitidos</h2>
         <div class="row" style="margin-bottom:8px"><a href="/api/certificates.csv"><button class="ghost">⬇ Exportar CSV</button></a></div>
-        <div id="certsum" class="row" style="margin-bottom:12px"></div>
+        <div id="certsum" class="row" style="margin-bottom:10px"></div>
+        <div class="row" style="margin-bottom:10px;align-items:flex-end">
+          <div><label>Buscar (CN, SAN, serial)</label><input id="cert-q" placeholder="filtrar…" oninput="renderCerts()"></div>
+          <div style="flex:0"><label>Estado</label><select id="cert-filter" onchange="renderCerts()">
+            <option value="">todos</option><option value="ok">vigentes</option>
+            <option value="warning">por vencer</option><option value="critical">críticos</option>
+            <option value="expired">vencidos</option></select></div>
+          <div style="flex:0"><label>&nbsp;</label><span id="cert-count" class="muted" style="font-size:12px"></span></div>
+        </div>
         <table id="certs"><thead><tr>
           <th>Common Name / SANs</th><th>Estado</th><th>Vence en</th><th>Emitido</th><th>Tipo</th><th>Serial</th>
         </tr></thead><tbody></tbody></table>
@@ -407,18 +415,34 @@ async function certDetail(file){
       'SHA-256     : '+c.fingerprint;
   }catch(e){ out.textContent='❌ '+e.message; }
 }
+let ALLCERTS=[];
+function setCertFilter(st){ $('#cert-filter').value=st; renderCerts(); }
 async function loadCerts(){
-  const d = await j('/api/certificates'); const s=d.summary;
+  const d = await j('/api/certificates'); const s=d.summary; ALLCERTS=d.certificates;
+  const chip=(st,col,lbl,n)=>`<span class="chip" onclick="setCertFilter('${st}')" style="cursor:pointer;color:${col}"><b>${n}</b> ${lbl}</span>`;
   $('#certsum').innerHTML =
-    `<span class="chip"><b>${s.total}</b> total</span>`+
-    `<span class="chip" style="color:var(--ok)"><b>${s.ok}</b> vigentes</span>`+
-    `<span class="chip" style="color:var(--warn)"><b>${s.warning}</b> por vencer</span>`+
-    `<span class="chip" style="color:#ffa198"><b>${s.critical}</b> críticos</span>`+
-    `<span class="chip" style="color:var(--bad)"><b>${s.expired}</b> vencidos</span>`;
+    chip('','inherit','total',s.total)+
+    chip('ok','var(--ok)','vigentes',s.ok)+
+    chip('warning','var(--warn)','por vencer',s.warning)+
+    chip('critical','#ffa198','críticos',s.critical)+
+    chip('expired','var(--bad)','vencidos',s.expired);
+  renderCerts();
+}
+function renderCerts(){
+  const q=($('#cert-q').value||'').toLowerCase().trim();
+  const f=$('#cert-filter').value;
+  const rows=ALLCERTS.filter(c=>{
+    if(f && c.status!==f) return false;
+    if(!q) return true;
+    return (c.common_name||'').toLowerCase().includes(q)
+      || (c.sans||[]).some(s=>s.toLowerCase().includes(q))
+      || (c.serial||'').toLowerCase().includes(q);
+  });
+  $('#cert-count').textContent=`${rows.length} de ${ALLCERTS.length}`;
   const tb=$('#certs tbody');
-  if(!d.certificates.length){tb.innerHTML='';$('#certs').style.display='none';$('#certempty').style.display='block';return;}
+  if(!ALLCERTS.length){tb.innerHTML='';$('#certs').style.display='none';$('#certempty').style.display='block';return;}
   $('#certs').style.display='';$('#certempty').style.display='none';
-  tb.innerHTML = d.certificates.map(c=>{
+  tb.innerHTML = rows.map(c=>{
     const sans=c.sans.length?`<div class="muted" style="font-size:11px">${c.sans.join(', ')}</div>`:'';
     const rev=(ADMIN&&c.file)?` <a href="#" title="revocar" onclick="revokeCert('${(c.file||'').replace(/'/g,"")}');return false" style="text-decoration:none">🚫</a>`:'';
     const dl=c.file?` <a href="/api/cert-file?file=${encodeURIComponent(c.file)}" title="descargar">⬇</a> <a href="#" title="ver detalle" onclick="certDetail('${(c.file||'').replace(/'/g,"")}');return false">🔍</a>${rev}`:'';

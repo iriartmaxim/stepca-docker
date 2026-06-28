@@ -47,3 +47,5 @@ notificaciones, reporting/compliance, API keys, multi-tenant, métricas.)
 
 ## Bitácora
 - (init) Roadmap creado. Arranque por A1 (CRL).
+- B-research ✅ docs/pki-feature-matrix.md (relevamiento comerciales/OSS).
+- B1 ✅ Inventario: búsqueda/filtrado + chips de estado clickeables.
