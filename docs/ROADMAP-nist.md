@@ -17,10 +17,11 @@ Estado: ⬜ pendiente · 🚧 en curso · ✅ hecho.
 - ⬜ OCSP: evaluar responder (step-ca no trae OCSP nativo; opción CRL-only + doc).
 - NIST: 800-15 (repositorios), 800-57 (revocación), 800-53 SC-17.
 
-### A2. Custodia de claves: KMS/HSM + Root offline  ⬜
-- ⬜ UI: panel de estado de custodia (tipo de KMS por CA: software/pkcs11/cloud), warning si software.
+### A2. Custodia de claves: KMS/HSM + Root offline  🚧
+- ✅ UI: panel "Custodia de claves" en Configuración (/api/key-custody): tipo de KMS por
+  CA (software/pkcs11/cloud), badge HSM vs software, y aviso NIST si es software.
 - ⬜ Soporte PKCS#11 opt-in vía env (documentado en hardening §2) + verificación desde la UI.
-- ⬜ UI: indicador "Root offline" (root detenida) y guía de ceremonia.
+- ✅ UI: indicador Root online/offline (NIST sugiere offline). ⬜ guía de ceremonia.
 
 ### A3. Gobierno documental: CP/CPS + políticas  ⬜
 - ⬜ Plantilla CP/CPS (RFC 3647) versionada + link desde la UI.
@@ -52,3 +53,4 @@ notificaciones, reporting/compliance, API keys, multi-tenant, métricas.)
 - B-research ✅ docs/pki-feature-matrix.md (relevamiento comerciales/OSS).
 - B1 ✅ Inventario: búsqueda/filtrado + chips de estado clickeables.
 - A4 ✅ Sección Auditoría (emisiones+revocaciones, /api/audit + CSV).
+- A2 ✅ (panel) Custodia de claves en la UI (/api/key-custody, avisos NIST).

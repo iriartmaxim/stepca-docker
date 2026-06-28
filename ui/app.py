@@ -362,6 +362,45 @@ def settings():
     return {"ui": ui, "intermediate": ca}
 
 
+@app.get("/api/key-custody")
+def key_custody():
+    """Custodia de claves por CA (NIST 800-57): tipo de KMS y estado de la Root."""
+    import json
+    items = []
+    kms_type, key_ref, crl_on = "software", None, None
+    try:
+        with open(INT_CFG_FILE) as f:
+            d = json.load(f)
+        kms = d.get("kms") or {}
+        if kms.get("type"):
+            kms_type = kms["type"]
+        key_ref = d.get("key")
+        crl_on = bool((d.get("crl") or {}).get("enabled"))
+    except Exception:
+        pass
+    soft = kms_type == "software"
+    items.append({"ca": "Intermediate (principal)", "kms": kms_type, "hsm_backed": not soft,
+                  "online": None, "crl": crl_on,
+                  "note": "Clave en archivo cifrado en disco — NIST 800-57 sugiere HSM/PKCS#11"
+                  if soft else "Clave protegida por KMS/HSM"})
+    root_online = None
+    try:
+        with httpx.Client(verify=False, timeout=3) as c:
+            root_online = c.get("https://stepca-root:9000/health").json().get("status") == "ok"
+    except Exception:
+        root_online = False
+    items.append({"ca": "Root CA", "kms": "software", "hsm_backed": False, "online": root_online,
+                  "note": "Root ONLINE — NIST sugiere mantenerla offline salvo para firmar"
+                  if root_online else "Root offline ✓ (recomendado)"})
+    for iid, v in ISSUERS.items():
+        if iid == "default":
+            continue
+        items.append({"ca": v["label"], "kms": "n/d", "hsm_backed": None, "online": None,
+                      "note": "Config no montada en la UI; asumir software salvo verificación"})
+    return {"items": items,
+            "recommend": "Producción: claves de CA en HSM/PKCS#11 y Root offline (ver docs/hardening.md §2-3)."}
+
+
 class UiCfgReq(BaseModel):
     cert_warn_h: float
     cert_crit_h: float

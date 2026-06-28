@@ -242,6 +242,8 @@
           <span id="cf-msg" class="muted" style="font-size:12px"></span>
         </div>
       </div>
+      <div class="card"><h2>Custodia de claves (NIST 800-57)</h2><div id="cfg-custody"></div>
+        <div id="cfg-custody-note" class="muted" style="font-size:12px;margin-top:8px"></div></div>
       <div class="card"><h2>Intermediate CA · claims y provisioners</h2><div id="cfg-int"></div></div>
       <div class="card"><h2>Infraestructura</h2><div id="cfg-infra"></div></div>
       <div class="muted" style="font-size:12px">Vista de sólo lectura. La edición aplicable se agrega en próximas iteraciones (ver docs/ROADMAP-ui.md).</div>
@@ -301,6 +303,23 @@ async function loadSettings(){
     }
     $('#cfg-infra').innerHTML=`<table>${kv({'PostgreSQL hosts':u.pg_hosts.join(', '),'PG user':u.pg_user,'HAProxy stats':u.haproxy_stats})}</table>`;
   }catch(e){ $('#cfg-ui').innerHTML='<span class="muted">'+e.message+'</span>'; }
+  loadKeyCustody();
+}
+async function loadKeyCustody(){
+  try{
+    const d=await j('/api/key-custody');
+    const badge=(it)=>{
+      if(it.hsm_backed===true) return '<span class="pill ok">HSM/KMS</span>';
+      if(it.hsm_backed===false) return '<span class="pill warning">software</span>';
+      return '<span class="pill">n/d</span>';
+    };
+    const online=(it)=> it.online===true?' · <span class="pill critical">online</span>'
+      : it.online===false?' · <span class="pill ok">offline</span>':'';
+    $('#cfg-custody').innerHTML='<table><tr><th>CA</th><th>Protección</th><th>Nota</th></tr>'+
+      d.items.map(it=>`<tr><td><b>${it.ca}</b></td><td>${badge(it)}${online(it)}</td>
+        <td class="muted" style="font-size:12px">${it.note||''}</td></tr>`).join('')+'</table>';
+    $('#cfg-custody-note').textContent='ℹ️ '+d.recommend;
+  }catch(e){ $('#cfg-custody').innerHTML='<span class="muted">'+e.message+'</span>'; }
 }
 async function saveUiCfg(){
   const m=$('#cf-msg'); m.textContent='Guardando…';

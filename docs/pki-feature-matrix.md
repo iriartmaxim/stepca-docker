@@ -25,7 +25,7 @@ Leyenda: ✅ tiene · 🟡 parcial · ⬜ falta · ★ priorizado para implement
 | 11 | **Plantillas/perfiles** de emisión gestionables | EJBCA (cert profiles), ADCS | 🟡 archivos .tpl | ★ A5 (ver/seleccionar en UI) |
 | 12 | **Operaciones masivas** (bulk revoke/export) | Keyfactor, Venafi | ⬜ | ★ B5 |
 | 13 | **Audit log / trazabilidad** | todos | ✅ vista Auditoría + CSV | — |
-| 14 | Gestión de claves / HSM | EJBCA, todos | ⬜ panel | ★ A2 |
+| 14 | Gestión de claves / HSM | EJBCA, todos | ✅ panel de custodia | 🟡 PKCS#11 opt-in |
 | 15 | Multi-CA / multi-issuer | EJBCA, Keyfactor | ✅ multi-intermediate | — |
 | 16 | Métricas / observabilidad | Keyfactor, Venafi | ✅ Grafana/Prometheus | — |
 | 17 | Portal self-service de enrolamiento | todos | ✅ UI de emisión | — |
