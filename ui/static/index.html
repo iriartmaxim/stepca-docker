@@ -42,9 +42,13 @@
   .badge{display:inline-block;background:#1f2937;border:1px solid var(--border);border-radius:20px;
     padding:1px 9px;font-size:11px;margin:2px 3px 0 0;color:#c9d1d9}
   .pill{padding:1px 8px;border-radius:20px;font-size:11px}
-  .pill.run{background:rgba(63,185,80,.15);color:var(--ok)}
-  .pill.stop{background:rgba(248,81,73,.15);color:var(--bad)}
+  .pill.run,.pill.ok{background:rgba(63,185,80,.15);color:var(--ok)}
+  .pill.stop,.pill.expired{background:rgba(248,81,73,.15);color:var(--bad)}
   .pill.absent{background:#21262d;color:var(--muted)}
+  .pill.warning{background:rgba(210,153,34,.18);color:var(--warn)}
+  .pill.critical{background:rgba(248,81,73,.18);color:#ffa198}
+  .chip{padding:4px 12px;border-radius:8px;font-size:12px;border:1px solid var(--border);background:#0d1117}
+  .chip b{font-size:15px}
   a{color:var(--accent)}
   .muted{color:var(--muted)}
 </style>
@@ -75,6 +79,19 @@
   <div class="card">
     <h2>Provisioners</h2>
     <div id="provs"></div>
+  </div>
+
+  <div class="card">
+    <h2>Certificados emitidos</h2>
+    <div id="certsum" class="row" style="margin-bottom:12px"></div>
+    <table id="certs"><thead><tr>
+      <th>Common Name / SANs</th><th>Estado</th><th>Vence en</th>
+      <th>Emitido</th><th>Tipo</th><th>Serial</th>
+    </tr></thead><tbody></tbody></table>
+    <div id="certempty" class="muted" style="display:none">
+      Sin certificados en el inventario. Se llenan al emitir desde la UI (modo completo)
+      o cuando los demos depositan el cert en <code>persistent/issued/</code>.
+    </div>
   </div>
 
   <div class="card" id="card-services">
@@ -170,8 +187,32 @@ async function loadLogs(){
   try{const r=await fetch('/api/logs/'+$('#logsvc').value+'?tail=200');out.textContent=await r.text();out.scrollTop=out.scrollHeight;}
   catch(e){out.textContent=e.message;}
 }
+const STLABEL={ok:'vigente',warning:'por vencer',critical:'crítico',expired:'vencido'};
+async function loadCerts(){
+  const d = await j('/api/certificates');
+  const s=d.summary;
+  $('#certsum').innerHTML =
+    `<span class="chip"><b>${s.total}</b> total</span>`+
+    `<span class="chip" style="color:var(--ok)"><b>${s.ok}</b> vigentes</span>`+
+    `<span class="chip" style="color:var(--warn)"><b>${s.warning}</b> por vencer (&lt;6h)</span>`+
+    `<span class="chip" style="color:#ffa198"><b>${s.critical}</b> críticos (&lt;2h)</span>`+
+    `<span class="chip" style="color:var(--bad)"><b>${s.expired}</b> vencidos</span>`;
+  const tb=$('#certs tbody');
+  if(!d.certificates.length){ tb.innerHTML=''; $('#certs').style.display='none'; $('#certempty').style.display='block'; return; }
+  $('#certs').style.display=''; $('#certempty').style.display='none';
+  tb.innerHTML = d.certificates.map(c=>{
+    const sans = c.sans.length?`<div class="muted" style="font-size:11px">${c.sans.join(', ')}</div>`:'';
+    return `<tr>
+      <td><b>${c.common_name||'—'}</b>${sans}</td>
+      <td><span class="pill ${c.status}">${STLABEL[c.status]||c.status}</span></td>
+      <td>${c.expires_in}<div class="muted" style="font-size:11px">${c.not_after.slice(0,16).replace('T',' ')}</div></td>
+      <td class="muted">${c.not_before.slice(0,16).replace('T',' ')}</td>
+      <td class="muted">${c.key_type}</td>
+      <td><code>${c.serial.slice(0,16)}…</code></td></tr>`;
+  }).join('');
+}
 let RO=true;
-function tick(){loadStatus();if(!RO)loadServices();}
+function tick(){loadStatus();loadCerts();if(!RO)loadServices();}
 async function init(){
   try{const cfg=await j('/api/config');RO=!!cfg.readonly;}catch(e){RO=true;}
   $('#mode').textContent = RO ? '🔒 sólo lectura' : '⚙️ control habilitado';

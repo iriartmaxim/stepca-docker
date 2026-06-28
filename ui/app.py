@@ -22,6 +22,9 @@ STEPCA_IMAGE = os.environ.get("STEPCA_IMAGE", "smallstep/step-ca:0.28.3")
 READONLY = os.environ.get("UI_READONLY", "1") == "1"
 ROOT_CRT = "/certs/root/root_ca.crt"
 INT_CRT = "/certs/root/intermediate_ca.crt"
+ISSUED_DIR = "/certs/issued"  # certificados emitidos (PEM) para inventario
+WARN_H = float(os.environ.get("CERT_WARN_H", "6"))   # "por vencer" si quedan < N horas
+CRIT_H = float(os.environ.get("CERT_CRIT_H", "2"))   # "crítico" si quedan < N horas
 
 # Servicios de la PKI (nombre de contenedor, etiqueta, URL interna de health)
 CAS = [
@@ -103,6 +106,78 @@ def cas():
         except Exception as e:
             out.append({"label": label, "error": str(e)})
     return out
+
+
+def _cert_summary(cert, fname=""):
+    now = dt.datetime.now(dt.timezone.utc)
+    na = cert.not_valid_after_utc
+    secs = (na - now).total_seconds()
+    if secs <= 0:
+        status, expires_in = "expired", "vencido"
+    else:
+        d, h = int(secs // 86400), int((secs % 86400) // 3600)
+        expires_in = f"{d}d {h}h" if d else f"{h}h {int((secs % 3600)//60)}m"
+        # Umbrales acordes a una CA de vida corta (maxTLSCertDuration 24h):
+        # crítico <2h, por vencer <6h. Overridable con CERT_WARN_H / CERT_CRIT_H.
+        status = ("critical" if secs < CRIT_H*3600 else
+                  ("warning" if secs < WARN_H*3600 else "ok"))
+    sans = []
+    try:
+        ext = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+        sans = [str(v) for v in ext.get_values_for_type(x509.DNSName)]
+        sans += [str(v) for v in ext.get_values_for_type(x509.IPAddress)]
+    except x509.ExtensionNotFound:
+        pass
+    cn = ""
+    try:
+        cn = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0].value
+    except Exception:
+        pass
+    iss_cn = ""
+    try:
+        iss_cn = cert.issuer.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0].value
+    except Exception:
+        iss_cn = cert.issuer.rfc4514_string()
+    fp = cert.fingerprint(hashes.SHA256()).hex()
+    return {
+        "file": fname,
+        "common_name": cn or (sans[0] if sans else ""),
+        "sans": sans,
+        "serial": format(cert.serial_number, "x"),
+        "issuer": iss_cn,
+        "not_before": cert.not_valid_before_utc.isoformat(),
+        "not_after": na.isoformat(),
+        "expires_in": expires_in,
+        "status": status,
+        "key_type": cert.public_key().__class__.__name__.replace("PublicKey", ""),
+        "fingerprint": ":".join(fp[i:i+2] for i in range(0, len(fp), 2)),
+    }
+
+
+@app.get("/api/certificates")
+def certificates():
+    """Inventario de certificados emitidos: escanea los PEM en ISSUED_DIR."""
+    out = []
+    if os.path.isdir(ISSUED_DIR):
+        for fn in sorted(os.listdir(ISSUED_DIR)):
+            if not fn.endswith((".crt", ".pem")):
+                continue
+            try:
+                with open(os.path.join(ISSUED_DIR, fn), "rb") as f:
+                    cert = x509.load_pem_x509_certificate(f.read())
+                out.append(_cert_summary(cert, fn))
+            except Exception:
+                continue
+    order = {"expired": 0, "critical": 1, "warning": 2, "ok": 3}
+    out.sort(key=lambda c: (order.get(c["status"], 9), c["not_after"]))
+    summary = {
+        "total": len(out),
+        "ok": sum(1 for c in out if c["status"] == "ok"),
+        "warning": sum(1 for c in out if c["status"] == "warning"),
+        "critical": sum(1 for c in out if c["status"] == "critical"),
+        "expired": sum(1 for c in out if c["status"] == "expired"),
+    }
+    return {"summary": summary, "certificates": out}
 
 
 @app.get("/api/root.crt")
@@ -228,6 +303,15 @@ def issue(req: IssueReq):
         if rc == 0:
             ix = api.exec_create(cid, ["step", "certificate", "inspect", "/tmp/d.crt", "--short"])
             inspect = api.exec_start(ix).decode(errors="replace")
+            # Guardar el cert emitido en el inventario (si el dir es escribible)
+            try:
+                cat = api.exec_create(cid, ["cat", "/tmp/d.crt"])
+                pem = api.exec_start(cat)
+                os.makedirs(ISSUED_DIR, exist_ok=True)
+                with open(os.path.join(ISSUED_DIR, f"{domain}.crt"), "wb") as f:
+                    f.write(pem)
+            except Exception:
+                pass
         return {"ok": rc == 0, "output": out + ("\n----- inspect -----\n" + inspect if inspect else "")}
     finally:
         try:

@@ -17,3 +17,5 @@ services:
       # Certificados de las CAs (sólo lectura) para inspección y descarga
       - ./persistent/root/certs:/certs/root:ro
       - ./persistent/intermediate/certs:/certs/intermediate:ro
+      # Inventario de certificados emitidos (sólo lectura)
+      - ./persistent/issued:/certs/issued:ro

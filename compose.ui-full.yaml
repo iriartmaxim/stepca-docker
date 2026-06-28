@@ -10,3 +10,5 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./persistent/root/certs:/certs/root:ro
       - ./persistent/intermediate/certs:/certs/intermediate:ro
+      # Inventario escribible: la emisión desde la UI deposita aquí el cert
+      - ./persistent/issued:/certs/issued

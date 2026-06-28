@@ -36,4 +36,8 @@ docker exec "${NAME}" sh -c "
   echo '--- certificado emitido ---' &&
   step certificate inspect /tmp/d.crt --short
 "
+# Depositar el cert en el inventario que visualiza la UI
+mkdir -p persistent/issued
+docker cp "${NAME}:/tmp/d.crt" "persistent/issued/${DOMAIN}.crt" 2>/dev/null \
+  && echo "📥 Cert guardado en persistent/issued/${DOMAIN}.crt"
 echo "✅ Demo http-01 OK"
