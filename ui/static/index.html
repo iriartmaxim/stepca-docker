@@ -231,6 +231,8 @@
         <div class="muted" style="font-size:12px;margin-bottom:8px">Estado en vivo de los controles del stack frente a las recomendaciones NIST.</div>
         <table id="comp-tbl"><thead><tr><th>Control</th><th>Estado</th><th>Referencia</th><th>Detalle</th></tr></thead><tbody></tbody></table>
         <div id="comp-note" class="muted" style="font-size:12px;margin-top:8px"></div>
+        <div class="row" style="margin-top:10px"><button class="ghost" onclick="toggleCpCps()">📄 Ver CP/CPS</button><a href="/api/cp-cps" download="CP-CPS.md"><button class="ghost">⬇ Descargar</button></a></div>
+        <pre id="cpcps" style="display:none;max-height:360px;overflow:auto"></pre>
       </div>
     </section>
 
@@ -290,6 +292,13 @@ document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{
   if(b.dataset.sec==='audit') loadAudit();
   if(b.dataset.sec==='compliance') loadCompliance();
 });
+async function toggleCpCps(){
+  const el=$('#cpcps');
+  if(el.style.display!=='none'){ el.style.display='none'; return; }
+  el.style.display='block'; el.textContent='Cargando…';
+  try{ const r=await fetch('/api/cp-cps'); el.textContent=r.ok?await r.text():'CP/CPS no disponible'; }
+  catch(e){ el.textContent='❌ '+e.message; }
+}
 async function loadCompliance(){
   const tb=$('#comp-tbl tbody');
   try{

@@ -404,6 +404,19 @@ def key_custody():
             "recommend": "Producción: claves de CA en HSM/PKCS#11 y Root offline (ver docs/hardening.md §2-3)."}
 
 
+CP_CPS_FILE = "/docs/CP-CPS.md"
+
+
+@app.get("/api/cp-cps")
+def cp_cps():
+    """Devuelve el documento CP/CPS (markdown) para mostrarlo en la UI."""
+    try:
+        with open(CP_CPS_FILE, encoding="utf-8") as f:
+            return Response(f.read(), media_type="text/markdown; charset=utf-8")
+    except Exception:
+        raise HTTPException(404, "CP/CPS no disponible")
+
+
 @app.get("/api/compliance")
 def compliance():
     """Tablero de cumplimiento NIST en vivo, consolidando los controles del stack."""
@@ -455,6 +468,10 @@ def compliance():
         audit_n = 0
     checks.append({"label": "Auditoría / trazabilidad", "ok": audit_n > 0, "nist": "800-53 AU",
                    "detail": f"{audit_n} eventos en el feed de auditoría"})
+
+    cp_cps = os.path.exists(CP_CPS_FILE)
+    checks.append({"label": "CP/CPS documentado", "ok": cp_cps, "nist": "SC-17 (políticas definidas)",
+                   "detail": "Plantilla CP/CPS (RFC 3647) disponible en la UI" if cp_cps else "Sin CP/CPS"})
 
     score = sum(1 for c in checks if c["ok"])
     return {"checks": checks, "score": score, "total": len(checks),

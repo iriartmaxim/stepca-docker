@@ -23,8 +23,9 @@ Estado: ⬜ pendiente · 🚧 en curso · ✅ hecho.
 - ⬜ Soporte PKCS#11 opt-in vía env (documentado en hardening §2) + verificación desde la UI.
 - ✅ UI: indicador Root online/offline (NIST sugiere offline). ⬜ guía de ceremonia.
 
-### A3. Gobierno documental: CP/CPS + políticas  🚧
-- ⬜ Plantilla CP/CPS (RFC 3647) versionada + link desde la UI.
+### A3. Gobierno documental: CP/CPS + políticas  ✅ (doc) / 🟡 (policy editor)
+- ✅ Plantilla CP/CPS (RFC 3647) en docs/CP-CPS.md, montada y visible/descargable desde
+  la UI (/api/cp-cps); check "CP/CPS documentado" en el dashboard de Cumplimiento.
 - 🟡 Editor de policy.x509 vía Admin API BLOQUEADO: la policy inline en el ca.json deja
   al provisioner en standalone mode; step ca policy exige policy gestionada en DB.
 - ✅ Alternativa lograda: edición de CLAIMS de duración por provisioner (A5).
@@ -60,3 +61,4 @@ notificaciones, reporting/compliance, API keys, multi-tenant, métricas.)
 - B5 ✅ Revocación masiva de los certs filtrados (/api/revoke-bulk, operator+).
 - A5/cfg ✅ Edición de claims de duración por provisioner (/api/provisioner-claims).
 - compliance ✅ Dashboard de Cumplimiento NIST en vivo (/api/compliance, sección UI).
+- A3 ✅ (doc) CP/CPS RFC 3647 (docs/CP-CPS.md) visible en la UI (/api/cp-cps).
