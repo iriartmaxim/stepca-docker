@@ -75,7 +75,6 @@
     <button data-sec="inv"><span class="ico">🗂️</span> Inventario</button>
     <button data-sec="audit"><span class="ico">🕓</span> Auditoría</button>
     <button data-sec="compliance"><span class="ico">✅</span> Cumplimiento</button>
-    <button data-sec="ops"><span class="ico">🛠️</span> Operaciones</button>
     <button data-sec="config"><span class="ico">⚙️</span> Configuración</button>
   </nav>
 
@@ -236,14 +235,6 @@
       </div>
     </section>
 
-    <!-- OPERACIONES -->
-    <section id="sec-ops">
-      <div class="card"><h2>Operaciones</h2>
-        <div class="muted" style="font-size:12px;margin-bottom:10px">La UI no monta el socket de Docker: estas operaciones se ejecutan en el host. Copiá el comando.</div>
-        <div id="ops"></div>
-      </div>
-    </section>
-
     <!-- CONFIGURACIÓN -->
     <section id="sec-config">
       <div class="card"><h2>UI · emisión</h2><div id="cfg-ui"></div>
@@ -325,35 +316,6 @@ async function loadStatus(){
   $('#overall').className='dot '+(d.every(c=>c.healthy)?'ok':(d.some(c=>c.healthy)?'warn':'bad'));
 }
 function kv(o){ return Object.entries(o).map(([k,v])=>`<tr><td class="muted">${k}</td><td>${v==null?'—':(typeof v==='object'?JSON.stringify(v):v)}</td></tr>`).join(''); }
-function cp(t){ navigator.clipboard&&navigator.clipboard.writeText(t); }
-async function loadOps(){
-  try{
-    const d=await j('/api/operations'); const cats={};
-    d.operations.forEach(o=>{(cats[o.cat]=cats[o.cat]||[]).push(o);});
-    $('#ops').innerHTML=Object.entries(cats).map(([cat,list])=>`<div style="margin-bottom:14px"><b>${cat}</b>`+
-      list.map(o=>{
-        const run=(o.kind==='api'&&o.id)
-          ? `<button class="primary" onclick="runOp('${o.id}')">▶ Ejecutar</button>`
-          : `<button class="ghost" onclick="cp('${o.cmd.replace(/'/g,"\\'")}')">copiar</button>`;
-        const tag=o.kind==='api'?'<span class="pill ok" style="font-size:10px">UI</span>':'<span class="pill" style="font-size:10px">host</span>';
-        return `<div style="display:flex;gap:8px;align-items:center;margin:6px 0">
-          ${run}<code style="flex:1">${o.cmd}</code>${tag}</div>
-          <div class="muted" style="font-size:11px;margin:-2px 0 6px 64px">${o.desc}</div>
-          ${o.id?`<pre id="op-out-${o.id}" style="display:none;margin:0 0 8px 64px"></pre>`:''}`;
-      }).join('')+
-      `</div>`).join('');
-  }catch(e){ $('#ops').innerHTML='<span class="muted">'+e.message+'</span>'; }
-}
-async function runOp(id){
-  const out=$('#op-out-'+id); out.style.display='block'; out.textContent='Ejecutando…';
-  const tok=$('#i-token').value||prompt('Token (operator+):'); if(!tok){ out.textContent=''; return; }
-  try{
-    const r=await fetch('/api/operations/run/'+id,{method:'POST',headers:{'X-Auth-Token':tok}});
-    if(!r.ok){ out.textContent='❌ '+(await r.text()); return; }
-    const d=await r.json();
-    out.textContent=(d.ok?'✅ OK\n':'⚠️ con fallos\n')+d.output;
-  }catch(e){ out.textContent='❌ '+e.message; }
-}
 async function loadSettings(){
   try{
     const d=await j('/api/settings'); const u=d.ui, c=d.intermediate;
@@ -709,7 +671,7 @@ async function init(){
     .map(c=>`<label style="display:flex;gap:4px;align-items:center;margin:0"><input type="checkbox" value="${c}" style="width:auto"> ${c}</label>`).join('');
   // carga inicial + refresh
   function tick(){loadStatus();loadCerts();loadHaproxy();loadPg();}
-  tick();loadCas();loadProvs();loadSettings();loadOps();loadCrl();
+  tick();loadCas();loadProvs();loadSettings();loadCrl();
   setInterval(tick,5000);setInterval(loadProvs,15000);setInterval(loadSettings,30000);
 }
 init();

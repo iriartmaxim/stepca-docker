@@ -332,67 +332,6 @@ PG_HOSTS = [h for h in os.environ.get("PG_HOSTS", "pg-primary,pg-standby").split
 INT_CFG_FILE = os.environ.get("INT_CFG_FILE", "/cfg/intermediate/ca.json")
 
 
-OPERATIONS = [
-    {"cat": "Backups", "name": "Backup completo", "kind": "host",
-     "desc": "Tar consistente de secrets + persistent.", "cmd": "make backup"},
-    {"cat": "Backups", "name": "Dump PostgreSQL", "kind": "host",
-     "desc": "pg_dump de stepca_int y stepca_ra a backups/.", "cmd": "make backup-pg"},
-    {"cat": "Backups", "name": "Restore", "kind": "host",
-     "desc": "Restaura un backup.", "cmd": "make restore FILE=backups/stepca-XXXX.tar.gz"},
-    {"cat": "PostgreSQL", "name": "Estado de replicación", "kind": "host",
-     "desc": "pg_stat_replication / recovery (también visible en Estado).", "cmd": "make pg-status"},
-    {"cat": "PostgreSQL", "name": "Failover", "kind": "host",
-     "desc": "Promueve el standby a primario (las CAs reconectan solas).", "cmd": "make pg-failover"},
-    {"cat": "Intermedias", "name": "Agregar intermedia (Root)", "kind": "host",
-     "desc": "Nueva CA intermedia firmada por la Root del stack.", "cmd": "scripts/add-intermediate.sh <id> \"<Nombre>\" <puerto>"},
-    {"cat": "Intermedias", "name": "Importar intermedia (ADCS)", "kind": "host",
-     "desc": "Importa una intermedia firmada por una CA externa.", "cmd": "scripts/import-intermediate.sh <id> \"<Nombre>\" <cert> <cadena> <clave> <puerto>"},
-    {"cat": "Mantenimiento", "name": "Renovar intermedia", "kind": "host",
-     "desc": "Renueva el cert de la intermedia si está por vencer.", "cmd": "make renew"},
-    {"cat": "Mantenimiento", "name": "Smoke test", "kind": "api", "id": "smoke",
-     "desc": "Salud de las CAs (se ejecuta desde la UI, sin socket).", "cmd": "make test"},
-    {"cat": "Mantenimiento", "name": "Generar secretos", "kind": "host",
-     "desc": "Contraseñas fuertes (no sobrescribe).", "cmd": "scripts/gen-secrets.sh"},
-]
-
-
-@app.get("/api/operations")
-def operations():
-    """Catálogo de operaciones. Las de host se ejecutan en la máquina (la UI no
-    monta el socket de Docker); las de tipo 'api' se ejecutan desde la UI."""
-    return {"socket_free": True, "operations": OPERATIONS}
-
-
-def _run_smoke():
-    """Chequea la salud de todas las CAs vía httpx (sin socket)."""
-    lines, all_ok = [], True
-    for ca in CAS:
-        ok = False
-        try:
-            with httpx.Client(verify=False, timeout=3) as c:
-                ok = c.get(ca["url"] + "/health").json().get("status") == "ok"
-        except Exception:
-            ok = False
-        all_ok = all_ok and ok
-        lines.append(("OK  " if ok else "DOWN ") + ca["label"] + " (" + ca["name"] + "): "
-                      + ("healthy" if ok else "caído"))
-    return all_ok, "\n".join(lines)
-
-
-OP_RUNNERS = {"smoke": _run_smoke}
-
-
-@app.post("/api/operations/run/{op_id}")
-def run_operation(op_id: str, x_auth_token: str = Header(default="")):
-    """Ejecuta una operación de tipo 'api' desde la UI (sin socket). Rol operator+."""
-    _require_role(x_auth_token, "operator")
-    runner = OP_RUNNERS.get(op_id)
-    if not runner:
-        raise HTTPException(404, "Operación no ejecutable desde la UI")
-    ok, output = runner()
-    return {"ok": ok, "output": output}
-
-
 @app.get("/api/settings")
 def settings():
     """Vista de la configuración vigente (sólo lectura)."""
