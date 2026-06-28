@@ -167,21 +167,23 @@
       <div class="card"><h2>Generar CSR + clave (descargable)</h2>
         <div class="muted" style="font-size:12px;margin-bottom:6px">Material local; no toca la PKI. Útil para firmar con cualquier CA (incl. Microsoft ADCS).</div>
         <div class="row">
-          <div><label>Tipo de CSR</label><select id="c-mode" onchange="csrMode()">
-            <option value="leaf">Hoja (servicio/cliente)</option>
+          <div><label>Template (uso)<span class="tip" title="Plantilla del CSR: define si es una hoja (servicio/cliente) o una sub-CA, y autocompleta el tipo de clave recomendado. El uso final (EKU) lo decide quien firma el CSR.">?</span></label><select id="c-template" onchange="applyCsrTemplate()">
+            <option value="leaf-server">Hoja · TLS servidor</option>
+            <option value="leaf-client">Hoja · TLS cliente / dispositivo</option>
             <option value="sub-ca">CA intermedia (sub-CA · para ADCS)</option>
           </select></div>
-          <div><label id="c-cn-lbl">Common Name (FQDN)</label><input id="c-cn" value="servicio.empresa.com"></div>
-          <div id="c-sans-wrap"><label>SANs (coma)</label><input id="c-sans" placeholder="www.empresa.com, api.empresa.com"></div>
-          <div id="c-pl-wrap" style="display:none;flex:0"><label>pathlen</label><input id="c-pl" type="number" value="0" min="0" max="5" style="width:80px"></div>
+          <div><label id="c-cn-lbl">Common Name (FQDN)<span class="tip" title="Nombre principal del sujeto. Para una hoja, el FQDN del servicio; para una sub-CA, el nombre de la CA.">?</span></label><input id="c-cn" value="servicio.empresa.com"></div>
+          <div id="c-sans-wrap"><label>SANs (coma)<span class="tip" title="Subject Alternative Names: hostnames adicionales que cubrirá el certificado. Separá con comas. No aplica a sub-CA.">?</span></label><input id="c-sans" placeholder="www.empresa.com, api.empresa.com"></div>
+          <div id="c-pl-wrap" style="display:none;flex:0"><label>pathlen<span class="tip" title="Path Length: cuántas CAs intermedias puede haber por debajo de esta sub-CA (0 = sólo emite hojas).">?</span></label><input id="c-pl" type="number" value="0" min="0" max="5" style="width:80px"></div>
         </div>
+        <div id="csr-desc" class="muted" style="font-size:12px;margin:-2px 0 8px"></div>
         <div id="c-subca-note" class="muted" style="display:none;font-size:12px;margin:4px 0">
           Genera un CSR de sub-CA (CA:true, keyCertSign+cRLSign). Firmalo con la plantilla
           <b>Subordinate Certification Authority</b> de ADCS y luego importá la cadena (ver docs/external-ca-adcs.md).
         </div>
         <div class="row">
-          <div><label>Tipo de clave</label><select id="c-kty" onchange="syncKey('c')"></select></div>
-          <div><label>Curva / tamaño</label><select id="c-kparam"></select></div>
+          <div><label>Tipo de clave<span class="tip" title="Algoritmo de la clave privada que se genera localmente. EC es más liviano; RSA tiene más compatibilidad (recomendado para sub-CA hacia ADCS).">?</span></label><select id="c-kty" onchange="syncKey('c')"></select></div>
+          <div><label>Curva / tamaño<span class="tip" title="EC: curva (P-256/384/521). RSA: tamaño en bits (2048/3072/4096). Para sub-CA conviene RSA 4096.">?</span></label><select id="c-kparam"></select></div>
           <div style="flex:0"><label>&nbsp;</label><button class="primary" onclick="genCsr()">Generar</button></div>
         </div>
         <div id="csr-result" style="display:none">
@@ -672,15 +674,24 @@ async function issue(){
   }catch(e){out.textContent='❌ '+e.message;}
 }
 
-// ── CSR ──
-function csrMode(){
-  const sub=$('#c-mode').value==='sub-ca';
+// ── CSR (templates que autocompletan) ──
+const CSR_TEMPLATES={
+  'leaf-server':{mode:'leaf',cn:'servicio.empresa.com',kty:'EC',kparam:'P-256',
+    desc:'Hoja para un servicio HTTPS. La firma la decide la CA; aquí sólo se arma el CSR + la clave.'},
+  'leaf-client':{mode:'leaf',cn:'cliente.empresa.com',kty:'EC',kparam:'P-256',
+    desc:'Hoja para autenticar un cliente/usuario/dispositivo (lado cliente de mTLS).'},
+  'sub-ca':{mode:'sub-ca',cn:'Empresa Issuing CA',kty:'RSA',kparam:'4096',
+    desc:'CSR de sub-CA (CA:true, keyCertSign+cRLSign). Firmalo con la plantilla Subordinate CA de ADCS y luego importá la cadena.'},
+};
+function applyCsrTemplate(){
+  const t=CSR_TEMPLATES[$('#c-template').value]; if(!t) return;
+  const sub=t.mode==='sub-ca';
   $('#c-sans-wrap').style.display=sub?'none':'';
   $('#c-pl-wrap').style.display=sub?'':'none';
   $('#c-subca-note').style.display=sub?'block':'none';
-  $('#c-cn-lbl').textContent=sub?'Nombre de la sub-CA (CN)':'Common Name (FQDN)';
-  if(sub){ $('#c-cn').value='Empresa Issuing CA'; $('#c-kty').value='RSA'; syncKey('c'); $('#c-kparam').value='4096'; }
-  else { $('#c-cn').value='servicio.empresa.com'; $('#c-kty').value='EC'; syncKey('c'); }
+  $('#c-cn-lbl').firstChild.textContent=sub?'Nombre de la sub-CA (CN) ':'Common Name (FQDN) ';
+  $('#c-cn').value=t.cn; $('#c-kty').value=t.kty; syncKey('c'); $('#c-kparam').value=t.kparam;
+  $('#csr-desc').textContent=t.desc;
 }
 let CSR={};
 async function genCsr(){
@@ -688,7 +699,7 @@ async function genCsr(){
   const sans=$('#c-sans').value.split(',').map(s=>s.trim()).filter(Boolean);
   try{
     const d=await j('/api/csr',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({common_name:$('#c-cn').value,mode:$('#c-mode').value,sans,
+      body:JSON.stringify({common_name:$('#c-cn').value,mode:(CSR_TEMPLATES[$('#c-template').value]||{}).mode||'leaf',sans,
         key_type:$('#c-kty').value,key_param:$('#c-kparam').value,path_len:parseInt($('#c-pl').value||'0')})});
     CSR=d; $('#csrOut').textContent=d.csr; $('#csr-result').style.display='block';
   }catch(e){$('#csrErr').style.display='block';$('#csrErr').textContent='❌ '+e.message;}
@@ -704,7 +715,7 @@ async function init(){
   try{const pf=await j('/api/profiles');
     KEYTYPES=pf.key_types; PROFILES_DATA=pf.profiles;
     $('#i-profile').innerHTML=Object.entries(pf.profiles).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('');
-    fillKty('i'); fillKty('c'); applyProfile();
+    fillKty('i'); fillKty('c'); applyProfile(); applyCsrTemplate();
   }catch(e){}
   try{const iss=await j('/api/issuers');
     const opts=iss.map(i=>`<option value="${i.id}">${i.label}</option>`).join('');
