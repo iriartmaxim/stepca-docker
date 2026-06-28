@@ -1,0 +1,30 @@
+# ClusterIssuer de cert-manager apuntando al provisioner ACME de la RA.
+# Requiere que el cluster confíe en root_ca.crt (ver README "Confiar en la Root CA").
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: stepca-acme
+spec:
+  acme:
+    server: https://stepca-ra-one.local:9100/acme/acme/directory
+    email: admin@example.com
+    privateKeySecretRef:
+      name: stepca-acme-account-key
+    solvers:
+      - http01:
+          ingress:
+            class: nginx
+---
+# Certificado de ejemplo
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: miapp-tls
+  namespace: default
+spec:
+  secretName: miapp-tls
+  issuerRef:
+    name: stepca-acme
+    kind: ClusterIssuer
+  dnsNames:
+    - miapp.local

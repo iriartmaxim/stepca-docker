@@ -1,0 +1,30 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # step-ca expone métricas Prometheus en /metrics cuando se habilita
+  # "metrics" en ca.json (ver docs/observability.md). Se scrapean las réplicas.
+  - job_name: stepca-intermediate
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: ["stepca-int-1:9000", "stepca-int-2:9000"]
+        labels: { tier: intermediate }
+
+  - job_name: stepca-ra
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: ["stepca-ra-1:9100", "stepca-ra-2:9100"]
+        labels: { tier: ra }
+
+  - job_name: haproxy
+    static_configs:
+      - targets: ["haproxy:8404"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

@@ -1,0 +1,53 @@
+image:
+  repository: smallstep/step-ca
+  tag: "0.28.3"
+  pullPolicy: IfNotPresent
+
+# Contraseñas: en producción referenciá un Secret externo (existingSecret) o
+# usá sealed-secrets / external-secrets. NO pongas valores reales en git.
+secrets:
+  existingSecret: ""        # si se define, ignora los valores de abajo
+  rootPassword: "changeme"
+  intermediatePassword: "changeme"
+  raPassword: "changeme"
+
+root:
+  enabled: true
+  persistence:
+    size: 1Gi
+  resources:
+    limits: { cpu: "500m", memory: "256Mi" }
+  # offline: si true, el StatefulSet se escala a 0 tras firmar la intermedia
+  offline: false
+
+intermediate:
+  replicas: 1
+  persistence:
+    size: 2Gi
+  resources:
+    limits: { cpu: "1", memory: "512Mi" }
+  policy:
+    allowedDNS: ["*.local"]
+  # DB: badger (default) o postgresql para HA
+  db:
+    type: badgerv2
+    postgresql:
+      enabled: false
+      dsn: "postgresql://stepca:changeme@stepca-postgres:5432/stepca"
+
+# Lista de Registration Authorities (multi-tenant)
+ra:
+  - name: ra-one
+    hostname: stepca-ra-one.local
+    provisioner: ra_jwk
+    acme: true
+    resources:
+      limits: { cpu: "1", memory: "512Mi" }
+
+service:
+  type: ClusterIP
+
+ingress:
+  enabled: false
+  className: nginx
+  host: ca.example.com

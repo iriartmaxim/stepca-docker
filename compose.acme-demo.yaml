@@ -1,0 +1,43 @@
+# Infraestructura de demo para los challenges ACME (dns-01).
+# Uso: docker compose -f compose.yaml -f compose.acme-demo.yaml up -d
+#
+# Añade un CoreDNS autoritativo de la zona "local" y hace que la RA lo use como
+# resolver, para poder validar dns-01 (registros TXT _acme-challenge.*).
+services:
+  challenge-dns:
+    image: coredns/coredns:1.11.3
+    container_name: stepca-challenge-dns
+    restart: unless-stopped
+    command: ["-conf", "/etc/coredns/Corefile"]
+    volumes:
+      - ./examples/acme/coredns/Corefile:/etc/coredns/Corefile:ro
+      - acme-zones:/zones
+    networks:
+      default: {}
+      acme-demo:
+        ipv4_address: 172.31.0.53
+
+  # Ambas réplicas de la RA usan CoreDNS como resolver (post-HA: ra-1 y ra-2,
+  # detrás del alias stepca-ra-one.local de HAProxy).
+  stepca-ra-1:
+    networks:
+      default: {}
+      acme-demo: {}
+    dns:
+      - 172.31.0.53
+  stepca-ra-2:
+    networks:
+      default: {}
+      acme-demo: {}
+    dns:
+      - 172.31.0.53
+
+networks:
+  acme-demo:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.31.0.0/24
+
+volumes:
+  acme-zones:

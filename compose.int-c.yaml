@@ -1,0 +1,27 @@
+# Intermedia IMPORTADA 'c' (firmada por CA externa). Uso:
+#   docker compose -f compose.yaml -f compose.int-c.yaml up -d stepca-int-c
+services:
+  stepca-int-c:
+    image: smallstep/step-ca:0.28.3
+    container_name: stepca-int-c
+    restart: unless-stopped
+    depends_on: { pg-primary: { condition: service_healthy } }
+    secrets: [ { source: intermediate_ca_password, target: subca_password } ]
+    networks: { default: { aliases: [ "stepca-intermediate-c" ] } }
+    volumes:
+      - ./persistent/intermediate-c/certs:/home/step/certs
+      - ./persistent/intermediate-c/config:/home/step/config
+      - ./persistent/intermediate-c/secrets:/home/step/secrets
+      - ./infra/stepca/templates:/home/step/templates:ro
+    command: sh -c "step-ca --password-file=/run/secrets/subca_password /home/step/config/ca.json"
+    healthcheck:
+      test: ["CMD","step","ca","health","--ca-url","https://localhost:9000","--root","/home/step/certs/root_ca.crt"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    ports: [ "9003:9000" ]
+  stepca-ui:
+    environment:
+      ISSUER_C: "Empresa Issuing CA (ADCS)|https://stepca-intermediate-c:9000|/run/secrets/web_c"
+    volumes:
+      - ./persistent/intermediate-c/web_provisioner_password:/run/secrets/web_c:ro

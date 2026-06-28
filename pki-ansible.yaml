@@ -1,7 +1,12 @@
 - name: Despliegue de PKI con StepCA
   hosts: localhost
   vars:
+<<<<<<< HEAD
     docker_compose_dir: /root/stepca/stepca-try1
+=======
+    # Por defecto usa el directorio del playbook; overridable con -e docker_compose_dir=...
+    docker_compose_dir: "{{ playbook_dir }}"
+>>>>>>> main-clean
     stepca_containers:
       - stepca-root
       - stepca-intermediate
@@ -78,6 +83,7 @@
     # Permisos y copias
     # ---------------------------------------------------------------------
 
+<<<<<<< HEAD
     - name: Crear archivos de contraseña para secretos
       copy:
         content: "changeme"
@@ -88,6 +94,13 @@
         - intermediate_ca_password.txt
         - ra_password.txt
         - admin_password.txt
+=======
+    - name: Generar contraseñas fuertes para los secretos
+      command: bash scripts/gen-secrets.sh
+      args:
+        chdir: "{{ docker_compose_dir }}"
+      changed_when: true
+>>>>>>> main-clean
 
     - name: Dar permisos 777 a persistent
       file:
@@ -144,12 +157,20 @@
    # Copiar certificado y clave intermedia existentes
     - name: Copiar certificado intermedio existente
       copy:
+<<<<<<< HEAD
         src: "/root/stepca/stepca-try1/persistent/root/certs/intermediate_ca.crt"
+=======
+        src: "{{ docker_compose_dir }}/persistent/root/certs/intermediate_ca.crt"
+>>>>>>> main-clean
         dest: "{{ docker_compose_dir }}/persistent/intermediate/certs/intermediate_ca.crt"
         mode: '0644'
     - name: Copiar clave intermedia existente
       copy:
+<<<<<<< HEAD
         src: "/root/stepca/stepca-try1/persistent/root/secrets/intermediate_ca_key"
+=======
+        src: "{{ docker_compose_dir }}/persistent/root/secrets/intermediate_ca_key"
+>>>>>>> main-clean
         dest: "{{ docker_compose_dir }}/persistent/intermediate/secrets/intermediate_ca_key"
         mode: '0600'
 
@@ -258,7 +279,11 @@
           {
             "address": ":9100",
             "dnsNames": ["stepca-ra-one.local"],
+<<<<<<< HEAD
             "db": {"type":"badgerV2","dataSource":"/home/step/db"},
+=======
+            "db": {"type":"badgerv2","dataSource":"/home/step/db"},
+>>>>>>> main-clean
             "logger":{"format":"text"},
             "authority":{
               "type":"stepcas",
@@ -332,7 +357,11 @@
   # Copiar certificado de la intermedia y fijar permisos
     - name: Copiar certificado intermedio existente
       copy:
+<<<<<<< HEAD
         src: "/root/stepca/stepca-try1/persistent/root/certs/intermediate_ca.crt"
+=======
+        src: "{{ docker_compose_dir }}/persistent/root/certs/intermediate_ca.crt"
+>>>>>>> main-clean
         dest: "{{ docker_compose_dir }}/persistent/ra/ra-one/certs/intermediate_ca.crt"
         mode: '0644'
 

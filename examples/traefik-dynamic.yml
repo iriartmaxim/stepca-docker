@@ -1,0 +1,24 @@
+# Traefik: resolver ACME contra la RA de step-ca.
+# Montar como configuración estática (traefik.yml) o por CLI flags equivalentes.
+certificatesResolvers:
+  stepca:
+    acme:
+      caServer: https://stepca-ra-one.local:9100/acme/acme/directory
+      email: admin@example.com
+      storage: /letsencrypt/acme.json
+      tlsChallenge: {}
+
+# Ejemplo de router que usa el resolver
+http:
+  routers:
+    miapp:
+      rule: "Host(`miapp.local`)"
+      entryPoints: ["websecure"]
+      service: miapp
+      tls:
+        certResolver: stepca
+  services:
+    miapp:
+      loadBalancer:
+        servers:
+          - url: "http://miapp:8080"

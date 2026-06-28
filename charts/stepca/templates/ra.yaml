@@ -1,0 +1,44 @@
+{{- range .Values.ra }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "stepca.fullname" $ }}-{{ .name }}
+  labels: {{- include "stepca.labels" $ | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+      app.kubernetes.io/component: {{ .name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ $.Release.Name }}
+        app.kubernetes.io/component: {{ .name }}
+    spec:
+      securityContext: { runAsUser: 1000, fsGroup: 1000 }
+      containers:
+        - name: step-ca
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+          args: ["step-ca", "/home/step/config/ca.json"]
+          ports:
+            - { name: https, containerPort: 9100 }
+          resources: {{- toYaml .resources | nindent 12 }}
+          readinessProbe:
+            httpGet: { path: /health, port: https, scheme: HTTPS }
+            initialDelaySeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "stepca.fullname" $ }}-{{ .name }}
+  labels: {{- include "stepca.labels" $ | nindent 4 }}
+spec:
+  type: {{ $.Values.service.type }}
+  selector:
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/component: {{ .name }}
+  ports:
+    - { name: https, port: 9100, targetPort: https }
+{{- end }}

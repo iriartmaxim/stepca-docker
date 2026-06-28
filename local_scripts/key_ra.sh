@@ -4,7 +4,12 @@ set -eo pipefail
 #############################################
 # Parámetros (ajusta si tu ruta cambia)
 #############################################
+<<<<<<< HEAD
 WORKDIR="/root/stepca/stepca-try1"
+=======
+# Raíz del repo: directorio padre de local_scripts/ (overridable con WORKDIR=...)
+WORKDIR="${WORKDIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+>>>>>>> main-clean
 INTER_PASS="$WORKDIR/secrets/intermediate_ca_password.txt"
 RA_SECRETS_DIR="$WORKDIR/persistent/ra/ra-one/secrets"
 

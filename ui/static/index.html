@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stepca · administración PKI</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --border:#30363d; --muted:#8b949e;
+    --text:#e6edf3; --accent:#3b82f6; --ok:#3fb950; --bad:#f85149; --warn:#d29922;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:12px;padding:14px 24px;
+    border-bottom:1px solid var(--border);background:var(--panel)}
+  header h1{font-size:17px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:12px}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+  .dot.ok{background:var(--ok)} .dot.bad{background:var(--bad)} .dot.warn{background:var(--warn)}
+  .layout{display:flex;min-height:calc(100vh - 52px)}
+  nav{width:210px;border-right:1px solid var(--border);background:var(--panel);padding:14px 10px;flex-shrink:0}
+  nav button{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:transparent;
+    color:var(--text);border:0;border-radius:8px;padding:9px 12px;cursor:pointer;font-size:14px;margin-bottom:2px}
+  nav button:hover{background:#1f2630}
+  nav button.active{background:var(--accent);color:#fff}
+  nav .ico{width:18px;text-align:center}
+  main{flex:1;padding:24px;max-width:980px}
+  section{display:none}
+  section.active{display:block}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:18px}
+  .card h2{margin:0 0 14px;font-size:14px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+  .ca{border:1px solid var(--border);border-radius:8px;padding:14px;background:#0d1117}
+  .ca .name{font-weight:600;display:flex;align-items:center;gap:8px}
+  .ca .meta{color:var(--muted);font-size:12px;margin-top:6px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--muted);font-weight:500;font-size:12px}
+  code{background:#0d1117;border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-size:12px;word-break:break-all}
+  label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+  button.primary{background:var(--accent);border:1px solid var(--accent);color:#fff;border-radius:6px;padding:8px 14px;cursor:pointer}
+  button.ghost{background:#21262d;color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px}
+  button:hover{filter:brightness(1.1)}
+  input,select{background:#0d1117;border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:13px;width:100%}
+  .row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+  .row>div{flex:1;min-width:160px}
+  .tip{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;margin-left:5px;
+    border-radius:50%;background:#21262d;border:1px solid var(--border);color:var(--muted);
+    font-size:10px;cursor:help;vertical-align:middle;font-weight:700}
+  .tip:hover{background:var(--accent);color:#fff}
+  pre{background:#0d1117;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;max-height:340px;font-size:12px;margin:12px 0 0}
+  .badge{display:inline-block;background:#1f2937;border:1px solid var(--border);border-radius:20px;padding:1px 9px;font-size:11px;margin:2px 3px 0 0;color:#c9d1d9}
+  .pill{padding:1px 8px;border-radius:20px;font-size:11px}
+  .pill.ok{background:rgba(63,185,80,.15);color:var(--ok)}
+  .pill.expired{background:rgba(248,81,73,.15);color:var(--bad)}
+  .pill.warning{background:rgba(210,153,34,.18);color:var(--warn)}
+  .pill.critical{background:rgba(248,81,73,.18);color:#ffa198}
+  .chip{padding:4px 12px;border-radius:8px;font-size:12px;border:1px solid var(--border);background:#0d1117}
+  .chip b{font-size:15px}
+  a{color:var(--accent)} .muted{color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <span id="overall" class="dot warn"></span>
+  <div><h1>stepca · administración de la PKI</h1>
+    <div class="sub">Root → Intermediate (HA) → RA (ACME) · PostgreSQL + HAProxy</div></div>
+  <span id="mode" class="badge" style="margin-left:auto"></span>
+</header>
+
+<div class="layout">
+  <nav id="nav">
+    <button data-sec="estado" class="active"><span class="ico">📊</span> Estado</button>
+    <button data-sec="cas"><span class="ico">📜</span> CAs</button>
+    <button data-sec="provs"><span class="ico">🔑</span> Provisioners</button>
+    <button data-sec="emitir"><span class="ico">➕</span> Emitir</button>
+    <button data-sec="csr"><span class="ico">📝</span> Generar CSR</button>
+    <button data-sec="inv"><span class="ico">🗂️</span> Inventario</button>
+    <button data-sec="audit"><span class="ico">🕓</span> Auditoría</button>
+    <button data-sec="compliance"><span class="ico">✅</span> Cumplimiento</button>
+    <button data-sec="config"><span class="ico">⚙️</span> Configuración</button>
+  </nav>
+
+  <main>
+    <!-- ESTADO -->
+    <section id="sec-estado" class="active">
+      <div class="card"><h2>Roots</h2><div id="status-root" class="grid"></div></div>
+      <div class="card"><h2>Intermedias</h2><div id="status-intermediate" class="grid"></div>
+        <div id="int-add" style="display:none;margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+          <div class="muted" style="font-size:12px;margin-bottom:8px">Autodesplegar una intermedia nueva (un step-ca más). La UI lo <b>encola</b>; un watcher del host la despliega y la registra acá (la UI no monta el socket de Docker).</div>
+          <div class="row">
+            <div style="flex:0"><label>id<span class="tip" title="Identificador corto y único (minúsculas/dígitos, ej.: d, prod, edge). Define el nombre del servicio stepca-int-&lt;id&gt;.">?</span></label><input id="int-id" placeholder="d" style="width:90px"></div>
+            <div><label>Nombre de la CA<span class="tip" title="Nombre legible de la intermedia (Subject CN), ej.: 'Intermediate D CA'.">?</span></label><input id="int-name" placeholder="Intermediate D CA"></div>
+            <div style="flex:0"><label>Puerto host<span class="tip" title="Puerto del host donde se publica esta intermedia (debe estar libre). Default 9002+.">?</span></label><input id="int-port" type="number" value="9003" style="width:110px"></div>
+            <div style="flex:0"><label>RA<span class="tip" title="Desplegar también una Autoridad de Registro (ACME) para esta intermedia. Opcional.">?</span></label><div style="padding-top:8px"><input id="int-ra" type="checkbox"></div></div>
+          </div>
+          <div class="row">
+            <div><label>Token (admin)<span class="tip" title="Token de rol admin (UI_TOKEN).">?</span></label><input id="int-token" type="password" placeholder="UI_TOKEN"></div>
+            <div style="flex:0"><label>&nbsp;</label><button class="primary" onclick="addIntermediate()">Desplegar</button></div>
+          </div>
+          <div id="int-msg" class="muted" style="font-size:12px"></div>
+          <div id="int-list" style="margin-top:8px"></div>
+        </div>
+      </div>
+      <div class="card"><h2>Autoridades de Registro (RA)</h2><div id="status-ra" class="grid"></div></div>
+      <div class="card"><h2>Réplicas · balanceador (HAProxy)</h2>
+        <table id="hap"><thead><tr><th>Backend</th><th>Servidor</th><th>Estado</th></tr></thead><tbody></tbody></table>
+        <div id="hap-msg" class="muted" style="font-size:12px"></div>
+        <div style="margin-top:8px"><a href="http://localhost:8404/" target="_blank"><button class="ghost">Panel HAProxy ↗</button></a></div>
+      </div>
+      <div class="card"><h2>PostgreSQL · replicación</h2><div id="pg" class="grid"></div></div>
+      <div class="card"><h2>Observabilidad</h2>
+        <div class="row">
+          <a href="http://localhost:3000/" target="_blank"><button class="ghost">Grafana ↗</button></a>
+          <a href="http://localhost:9090/" target="_blank"><button class="ghost">Prometheus ↗</button></a>
+          <a href="http://localhost:9090/targets" target="_blank"><button class="ghost">Targets ↗</button></a>
+        </div>
+      </div>
+    </section>
+
+    <!-- CAs -->
+    <section id="sec-cas">
+      <div class="card"><h2>Roots</h2>
+        <div id="cas-root" class="grid"></div>
+        <div style="margin-top:12px"><a href="/api/root.crt"><button class="ghost">⬇ Descargar root_ca.crt</button></a></div>
+      </div>
+      <div class="card"><h2>Intermedias</h2>
+        <div id="cas-intermediate" class="grid"></div>
+      </div>
+    </section>
+
+    <!-- PROVISIONERS -->
+    <section id="sec-provs">
+      <div class="card"><h2>Provisioners por CA</h2><div id="provs"></div></div>
+      <div class="card" id="prov-manage" style="display:none">
+        <h2>Agregar provisioner (Admin API)</h2>
+        <div class="row">
+          <div><label>Intermedia<span class="tip" title="CA intermedia sobre la que se crea el provisioner.">?</span></label><select id="p-issuer"></select></div>
+          <div><label>Tipo<span class="tip" title="Método de enrolamiento: ACME (automático, ej. lego/certbot), JWK (token firmado), X5C (mTLS con un cert de confianza), SCEP (dispositivos/MDM), OIDC (login con un IdP).">?</span></label>
+            <select id="p-type" onchange="provTypeChanged()">
+              <option value="ACME">ACME</option><option value="JWK">JWK</option>
+              <option value="X5C">X5C</option><option value="SCEP">SCEP</option><option value="OIDC">OIDC</option>
+            </select></div>
+          <div><label>Nombre<span class="tip" title="Identificador único del provisioner dentro de la CA (alfanumérico, . _ -).">?</span></label><input id="p-name" placeholder="mi-provisioner"></div>
+        </div>
+        <div id="pf-acme" class="row"><div><label>Challenges (vacío = todos)<span class="tip" title="Tipos de desafío ACME habilitados: http-01, dns-01, tls-alpn-01, device-attest-01. Vacío = todos.">?</span></label>
+          <div id="p-challs" style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px;padding-top:6px"></div></div></div>
+        <div id="pf-jwk" class="row" style="display:none"><div><label>Contraseña de la clave<span class="tip" title="JWK genera un par de claves; esta contraseña cifra la clave privada. Guardala: se necesita para emitir con este provisioner.">?</span></label><input id="p-jwkpw" type="password" placeholder="contraseña fuerte"></div></div>
+        <div id="pf-x5c" class="row" style="display:none"><div><label>PEM del root de confianza<span class="tip" title="X5C autentica presentando un certificado emitido por este root. Pegá el/los certificado(s) raíz en PEM (-----BEGIN CERTIFICATE-----).">?</span></label><textarea id="p-x5c" rows="4" placeholder="-----BEGIN CERTIFICATE-----" style="width:100%;font-family:monospace;font-size:11px"></textarea></div></div>
+        <div id="pf-scep" class="row" style="display:none"><div><label>Challenge (secreto)<span class="tip" title="SCEP usa un secreto compartido que el dispositivo/MDM envía al enrolarse. Definí un secreto fuerte.">?</span></label><input id="p-scep" placeholder="secreto compartido"></div></div>
+        <div id="pf-oidc" style="display:none">
+          <div class="row">
+            <div><label>client_id<span class="tip" title="ID de la aplicación registrada en tu proveedor de identidad (Google, Azure AD, Keycloak, etc.).">?</span></label><input id="p-oidc-id" placeholder="xxxxx.apps..."></div>
+            <div><label>client_secret<span class="tip" title="Secreto de la aplicación OIDC (si tu IdP lo requiere).">?</span></label><input id="p-oidc-secret" type="password"></div>
+          </div>
+          <div class="row"><div><label>configuration_endpoint<span class="tip" title="URL .well-known/openid-configuration del IdP. step-ca la consulta al agregar, así que debe ser accesible.">?</span></label><input id="p-oidc-cfg" placeholder="https://idp/.well-known/openid-configuration"></div></div>
+        </div>
+        <div class="row">
+          <div><label>Token de operador<span class="tip" title="Token de rol admin (UI_TOKEN). La gestión de provisioners requiere admin.">?</span></label><input id="p-token" type="password" placeholder="UI_TOKEN"></div>
+          <div style="flex:0"><label>&nbsp;</label><button class="primary" onclick="addProv()">Agregar</button></div>
+        </div>
+        <pre id="provOut" style="display:none"></pre>
+      </div>
+    </section>
+
+    <!-- EMITIR -->
+    <section id="sec-emitir">
+      <div class="card"><h2>Emitir certificado</h2>
+        <div id="issue-disabled" class="muted" style="display:none">
+          Emisión deshabilitada. Definí <code>UI_TOKEN</code> en <code>.env</code> y <code>make up</code>.
+        </div>
+        <div id="issue-form">
+          <div class="row">
+            <div><label>CA emisora<span class="tip" title="Intermedia que firma el certificado. Si tenés varias (multi-intermediate/ADCS), elegí cuál emite.">?</span></label><select id="i-issuer"></select></div>
+            <div><label>Nombre (CN) · *.local<span class="tip" title="Common Name: el hostname principal del certificado. En este lab se restringe a *.local por la política del provisioner.">?</span></label><input id="i-domain" value="miapp.local"></div>
+            <div><label>Perfil de uso (template)<span class="tip" title="Plantilla de emisión: define el uso (EKU/KeyUsage) y autocompleta tipo de clave y validez recomendados. Podés ajustarlos después.">?</span></label><select id="i-profile" onchange="applyProfile()"></select></div>
+          </div>
+          <div id="profile-desc" class="muted" style="font-size:12px;margin:-6px 0 10px"></div>
+          <div class="row">
+            <div><label>Tipo de clave<span class="tip" title="Algoritmo de la clave privada. EC (curvas elípticas) es más liviano/rápido; RSA tiene mayor compatibilidad con sistemas viejos.">?</span></label><select id="i-kty" onchange="syncKey('i')"></select></div>
+            <div><label>Curva / tamaño<span class="tip" title="EC: curva (P-256 alcanza para casi todo). RSA: tamaño en bits (≥2048; 3072/4096 más fuerte y más lento).">?</span></label><select id="i-kparam"></select></div>
+            <div><label>Validez<span class="tip" title="Duración del certificado (ej.: 12h, 24h). Vacío usa el default del provisioner. El máximo lo limita maxTLSCertDuration (claims).">?</span></label><input id="i-notafter" placeholder="ej.: 24h (vacío = default)"></div>
+          </div>
+          <div class="row">
+            <div><label>SANs adicionales (coma)<span class="tip" title="Subject Alternative Names extra (otros hostnames *.local que también validará el certificado). Separá con comas.">?</span></label><input id="i-sans" placeholder="alt1.local, alt2.local"></div>
+            <div><label>Token de operador<span class="tip" title="Token de rol operator o admin (UI_TOKEN). Autoriza la emisión sin exponer el socket de Docker.">?</span></label><input id="i-token" type="password" placeholder="UI_TOKEN" onblur="checkRole(this.value)"></div>
+            <div style="flex:0"><label>&nbsp;</label><button class="primary" onclick="issue()">Emitir</button></div>
+            <div style="flex:0"><label>&nbsp;</label><span id="role-badge" class="muted" style="font-size:12px"></span></div>
+          </div>
+          <pre id="issueOut" style="display:none"></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- CSR -->
+    <section id="sec-csr">
+      <div class="card"><h2>Generar CSR + clave (descargable)</h2>
+        <div class="muted" style="font-size:12px;margin-bottom:6px">Material local; no toca la PKI. Útil para firmar con cualquier CA (incl. Microsoft ADCS).</div>
+        <div class="row">
+          <div><label>Template (uso)<span class="tip" title="Plantilla del CSR: define si es una hoja (servicio/cliente) o una sub-CA, y autocompleta el tipo de clave recomendado. El uso final (EKU) lo decide quien firma el CSR.">?</span></label><select id="c-template" onchange="applyCsrTemplate()">
+            <option value="leaf-server">Hoja · TLS servidor</option>
+            <option value="leaf-client">Hoja · TLS cliente / dispositivo</option>
+            <option value="sub-ca">CA intermedia (sub-CA · para ADCS)</option>
+          </select></div>
+          <div><label id="c-cn-lbl">Common Name (FQDN)<span class="tip" title="Nombre principal del sujeto. Para una hoja, el FQDN del servicio; para una sub-CA, el nombre de la CA.">?</span></label><input id="c-cn" value="servicio.empresa.com"></div>
+          <div id="c-sans-wrap"><label>SANs (coma)<span class="tip" title="Subject Alternative Names: hostnames adicionales que cubrirá el certificado. Separá con comas. No aplica a sub-CA.">?</span></label><input id="c-sans" placeholder="www.empresa.com, api.empresa.com"></div>
+          <div id="c-pl-wrap" style="display:none;flex:0"><label>pathlen<span class="tip" title="Path Length: cuántas CAs intermedias puede haber por debajo de esta sub-CA (0 = sólo emite hojas).">?</span></label><input id="c-pl" type="number" value="0" min="0" max="5" style="width:80px"></div>
+        </div>
+        <div id="csr-desc" class="muted" style="font-size:12px;margin:-2px 0 8px"></div>
+        <div id="c-subca-note" class="muted" style="display:none;font-size:12px;margin:4px 0">
+          Genera un CSR de sub-CA (CA:true, keyCertSign+cRLSign). Firmalo con la plantilla
+          <b>Subordinate Certification Authority</b> de ADCS y luego importá la cadena (ver docs/external-ca-adcs.md).
+        </div>
+        <div class="row">
+          <div><label>Tipo de clave<span class="tip" title="Algoritmo de la clave privada que se genera localmente. EC es más liviano; RSA tiene más compatibilidad (recomendado para sub-CA hacia ADCS).">?</span></label><select id="c-kty" onchange="syncKey('c')"></select></div>
+          <div><label>Curva / tamaño<span class="tip" title="EC: curva (P-256/384/521). RSA: tamaño en bits (2048/3072/4096). Para sub-CA conviene RSA 4096.">?</span></label><select id="c-kparam"></select></div>
+          <div style="flex:0"><label>&nbsp;</label><button class="primary" onclick="genCsr()">Generar</button></div>
+        </div>
+        <div id="csr-result" style="display:none">
+          <div class="row" style="margin-top:12px">
+            <button class="ghost" onclick="dl('csr')">⬇ Descargar .csr</button>
+            <button class="ghost" onclick="dl('key')">⬇ Descargar .key</button>
+          </div>
+          <pre id="csrOut"></pre>
+        </div>
+        <pre id="csrErr" style="display:none"></pre>
+      </div>
+    </section>
+
+    <!-- INVENTARIO -->
+    <section id="sec-inv">
+      <div class="card"><h2>Lista de revocación (CRL)</h2>
+        <div class="row" style="margin-bottom:8px;align-items:flex-end">
+          <div style="flex:0"><label>CA emisora</label><select id="crl-issuer" onchange="loadCrl()"></select></div>
+          <div style="flex:0"><label>&nbsp;</label><a id="crl-dl" href="#"><button class="ghost">⬇ Descargar CRL</button></a></div>
+        </div>
+        <div id="crl-info"></div>
+      </div>
+      <div class="card"><h2>Certificados emitidos</h2>
+        <div class="row" style="margin-bottom:8px"><a href="/api/certificates.csv"><button class="ghost">⬇ Exportar CSV</button></a></div>
+        <div id="certsum" class="row" style="margin-bottom:10px"></div>
+        <div class="row" style="margin-bottom:10px;align-items:flex-end">
+          <div><label>Buscar (CN, SAN, serial)</label><input id="cert-q" placeholder="filtrar…" oninput="certFilterChanged()"></div>
+          <div style="flex:0"><label>Estado</label><select id="cert-filter" onchange="certFilterChanged()">
+            <option value="">todos</option><option value="ok">vigentes</option>
+            <option value="warning">por vencer</option><option value="critical">críticos</option>
+            <option value="expired">vencidos</option></select></div>
+          <div style="flex:0"><label>&nbsp;</label><span id="cert-count" class="muted" style="font-size:12px"></span></div>
+          <div style="flex:0" id="bulk-wrap"><label>&nbsp;</label><button class="ghost" style="color:var(--bad)" onclick="bulkRevoke()">🚫 Revocar filtrados</button></div>
+        </div>
+        <div id="bulk-out" class="muted" style="font-size:12px;margin-bottom:8px;display:none"></div>
+        <table id="certs"><thead><tr>
+          <th>Common Name / SANs</th><th>Estado</th><th>Vence en</th><th>Emitido</th><th>Tipo</th><th>Serial</th>
+        </tr></thead><tbody></tbody></table>
+        <div id="cert-pager" class="row" style="margin-top:10px;align-items:center"></div>
+        <div id="certempty" class="muted" style="display:none">Sin certificados en el inventario.</div>
+      </div>
+    </section>
+
+    <!-- Modal de detalle de certificado -->
+    <div id="cert-modal" onclick="closeCertModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:60;align-items:flex-start;justify-content:center;padding:48px 16px">
+      <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;max-width:700px;width:100%;max-height:80vh;overflow:auto;padding:18px" onclick="event.stopPropagation()">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <b id="cert-modal-title">Detalle del certificado</b>
+          <button class="ghost" onclick="closeCertModal()">✕ Cerrar</button>
+        </div>
+        <pre id="cert-detail" style="margin:0;max-height:62vh"></pre>
+      </div>
+    </div>
+
+    <!-- AUDITORÍA -->
+    <section id="sec-audit">
+      <div class="card"><h2>Auditoría</h2>
+        <div class="muted" style="font-size:12px;margin-bottom:8px">Línea de tiempo: emisiones (inventario) y revocaciones (DB), más recientes primero.</div>
+        <div class="row" style="margin-bottom:8px"><a id="audit-csv" href="/api/audit.csv"><button class="ghost">⬇ Exportar CSV</button></a><span id="audit-count" class="muted" style="font-size:12px;align-self:center"></span></div>
+        <table id="audit-tbl"><thead><tr><th>Fecha (UTC)</th><th>Evento</th><th>Sujeto</th><th>Serial</th><th>Detalle</th></tr></thead><tbody></tbody></table>
+        <div id="audit-empty" class="muted" style="display:none">Sin eventos.</div>
+      </div>
+    </section>
+
+    <!-- CUMPLIMIENTO -->
+    <section id="sec-compliance">
+      <div class="card"><h2>Cumplimiento (NIST) <span id="comp-score" class="muted" style="font-size:14px"></span></h2>
+        <div class="muted" style="font-size:12px;margin-bottom:8px">Estado en vivo de los controles del stack frente a las recomendaciones NIST.</div>
+        <table id="comp-tbl"><thead><tr><th>Control</th><th>Estado</th><th>Referencia</th><th>Detalle</th></tr></thead><tbody></tbody></table>
+        <div id="comp-note" class="muted" style="font-size:12px;margin-top:8px"></div>
+        <div class="row" style="margin-top:10px"><button class="ghost" onclick="toggleCpCps()">📄 Ver CP/CPS</button><a href="/api/cp-cps" download="CP-CPS.md"><button class="ghost">⬇ Descargar</button></a></div>
+        <pre id="cpcps" style="display:none;max-height:360px;overflow:auto"></pre>
+      </div>
+    </section>
+
+    <!-- CONFIGURACIÓN -->
+    <section id="sec-config">
+      <div class="card"><h2>UI · emisión</h2><div id="cfg-ui"></div>
+        <div id="cfg-edit" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+          <div class="row">
+            <div style="flex:0"><label>Por vencer (h)</label><input id="cf-warn" type="number" min="1" style="width:100px"></div>
+            <div style="flex:0"><label>Crítico (h)</label><input id="cf-crit" type="number" min="1" style="width:100px"></div>
+            <div><label>Token</label><input id="cf-token" type="password" placeholder="UI_TOKEN"></div>
+            <div style="flex:0"><label>&nbsp;</label><button class="primary" onclick="saveUiCfg()">Guardar</button></div>
+          </div>
+          <div class="row" style="margin-top:8px;align-items:flex-end">
+            <div><label>Webhook de alertas (http/https)</label><input id="cf-webhook" placeholder="https://hooks…/…"></div>
+            <div style="flex:0"><label>&nbsp;</label><button class="ghost" onclick="testWebhook()">Probar</button></div>
+            <div style="flex:0"><label>&nbsp;</label><button class="ghost" onclick="notifyExpiring()">Notificar vencimientos</button></div>
+          </div>
+          <span id="cf-msg" class="muted" style="font-size:12px"></span>
+        </div>
+      </div>
+      <div class="card"><h2>Custodia de claves (NIST 800-57)</h2><div id="cfg-custody"></div>
+        <div id="cfg-custody-note" class="muted" style="font-size:12px;margin-top:8px"></div></div>
+      <div class="card" id="claims-card" style="display:none"><h2>Claims de emisión (editable · admin)</h2>
+        <div class="muted" style="font-size:12px;margin-bottom:8px">Duraciones de certificado por provisioner (NIST: restringir vigencia). Formato: 5m, 12h, 24h.</div>
+        <div class="row" style="align-items:flex-end">
+          <div style="flex:0"><label>Provisioner</label><input id="cl-prov" value="web" style="width:110px"></div>
+          <div style="flex:0"><label>Mín</label><input id="cl-min" value="5m" style="width:80px"></div>
+          <div style="flex:0"><label>Default</label><input id="cl-def" value="24h" style="width:80px"></div>
+          <div style="flex:0"><label>Máx</label><input id="cl-max" value="24h" style="width:80px"></div>
+          <div><label>Token (admin)</label><input id="cl-token" type="password"></div>
+          <div style="flex:0"><label>&nbsp;</label><button class="primary" onclick="saveClaims()">Guardar</button></div>
+        </div>
+        <span id="cl-msg" class="muted" style="font-size:12px"></span>
+      </div>
+      <div class="card"><h2>Intermediate CA · claims y provisioners</h2><div id="cfg-int"></div></div>
+      <div class="card"><h2>Infraestructura</h2><div id="cfg-infra"></div></div>
+      <div class="muted" style="font-size:12px">Vista de sólo lectura. La edición aplicable se agrega en próximas iteraciones (ver docs/ROADMAP-ui.md).</div>
+    </section>
+  </main>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+async function j(u,o){const r=await fetch(u,o);if(!r.ok)throw new Error(await r.text());return r.json();}
+
+// ── navegación por secciones ──
+document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));
+  $('#sec-'+b.dataset.sec).classList.add('active');
+  if(b.dataset.sec==='inv') loadCrl();
+  if(b.dataset.sec==='audit') loadAudit();
+  if(b.dataset.sec==='compliance') loadCompliance();
+});
+async function toggleCpCps(){
+  const el=$('#cpcps');
+  if(el.style.display!=='none'){ el.style.display='none'; return; }
+  el.style.display='block'; el.textContent='Cargando…';
+  try{ const r=await fetch('/api/cp-cps'); el.textContent=r.ok?await r.text():'CP/CPS no disponible'; }
+  catch(e){ el.textContent='❌ '+e.message; }
+}
+async function loadCompliance(){
+  const tb=$('#comp-tbl tbody');
+  try{
+    const d=await j('/api/compliance');
+    $('#comp-score').textContent=`· ${d.score}/${d.total} controles`;
+    tb.innerHTML=d.checks.map(c=>`<tr>
+      <td><b>${c.label}</b></td>
+      <td><span class="pill ${c.ok?'ok':'warning'}">${c.ok?'cumple':'brecha'}</span></td>
+      <td class="muted" style="font-size:12px">${c.nist}</td>
+      <td class="muted" style="font-size:12px">${c.detail}</td></tr>`).join('');
+    $('#comp-note').textContent='ℹ️ '+d.note;
+  }catch(e){ tb.innerHTML=`<tr><td colspan="4" class="muted">❌ ${e.message}</td></tr>`; }
+}
+
+async function addIntermediate(){
+  const m=$('#int-msg'); m.textContent='Encolando…';
+  try{
+    const r=await fetch('/api/intermediates',{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':$('#int-token').value},
+      body:JSON.stringify({id:$('#int-id').value.trim(),name:$('#int-name').value.trim(),port:parseInt($('#int-port').value||'9002'),with_ra:$('#int-ra').checked})});
+    if(!r.ok){ m.textContent='❌ '+(await r.text()); return; }
+    const d=await r.json(); m.textContent='✅ '+d.note; loadIntermediates();
+  }catch(e){ m.textContent='❌ '+e.message; }
+}
+const INT_ST={pendiente:'warning',desplegando:'warning',desplegada:'ok',error:'critical'};
+async function loadIntermediates(){
+  try{
+    const d=await j('/api/intermediates');
+    $('#int-list').innerHTML = d.items.length ? '<table><tr><th>id</th><th>Nombre</th><th>Estado</th><th>Detalle</th></tr>'+
+      d.items.map(it=>`<tr><td><code>${it.id}</code></td><td>${it.name}</td>
+        <td><span class="pill ${INT_ST[it.status]||''}">${it.status}</span></td>
+        <td class="muted" style="font-size:11px">${it.detail||''}</td></tr>`).join('')+'</table>' : '';
+  }catch(e){}
+}
+async function loadStatus(){
+  const d = await j('/api/status');
+  const card=c=>`<div class="ca"><div class="name"><span class="dot ${c.healthy?'ok':'bad'}"></span>${c.label}</div>
+    <div class="meta">${c.name}<br>${c.host_port?('puerto host :'+c.host_port+' · '):''}${c.healthy?'healthy':'caído'}</div></div>`;
+  ['root','intermediate','ra'].forEach(role=>{
+    const items=d.filter(c=>c.role===role);
+    $('#status-'+role).innerHTML = items.length? items.map(card).join('') : '<span class="muted">—</span>';
+  });
+  $('#overall').className='dot '+(d.every(c=>c.healthy)?'ok':(d.some(c=>c.healthy)?'warn':'bad'));
+}
+function kv(o){ return Object.entries(o).map(([k,v])=>`<tr><td class="muted">${k}</td><td>${v==null?'—':(typeof v==='object'?JSON.stringify(v):v)}</td></tr>`).join(''); }
+async function loadSettings(){
+  try{
+    const d=await j('/api/settings'); const u=d.ui, c=d.intermediate;
+    $('#cfg-ui').innerHTML=`<table>${kv({
+      'Emisión habilitada':u.issue_enabled,'Umbral por vencer (h)':u.cert_warn_h,'Umbral crítico (h)':u.cert_crit_h,
+      'CA emisora (default)':u.int_ca_url,'CAs emisoras':u.issuers.map(i=>i.label).join(', ')})}</table>`;
+    if(ADMIN){ $('#cfg-edit').style.display='block';
+      if(!$('#cf-warn').value) $('#cf-warn').value=u.cert_warn_h;
+      if(!$('#cf-crit').value) $('#cf-crit').value=u.cert_crit_h;
+      if(!$('#cf-webhook').value && u.webhook_url) $('#cf-webhook').value=u.webhook_url;
+      $('#claims-card').style.display='block'; const cl=c.claims||{};
+      if(cl.minTLSCertDuration&&$('#cl-min').value==='5m') $('#cl-min').value=cl.minTLSCertDuration;
+      if(cl.defaultTLSCertDuration&&$('#cl-def').value==='24h') $('#cl-def').value=cl.defaultTLSCertDuration;
+      if(cl.maxTLSCertDuration&&$('#cl-max').value==='24h') $('#cl-max').value=cl.maxTLSCertDuration; }
+    if(c.error){ $('#cfg-int').innerHTML='<span class="muted">'+c.error+'</span>'; }
+    else{
+      $('#cfg-int').innerHTML=`<table>${kv({'dnsNames':c.dns_names,'DB':c.db_type,'Admin API':c.enable_admin,
+        'minTLSCertDuration':(c.claims||{}).minTLSCertDuration,'maxTLSCertDuration':(c.claims||{}).maxTLSCertDuration,
+        'defaultTLSCertDuration':(c.claims||{}).defaultTLSCertDuration})}</table>`+
+        '<div style="margin-top:8px">'+(c.provisioners||[]).map(p=>`<span class="badge">${p.name} · ${p.type}${p.policy&&p.policy.dns?' · '+p.policy.dns.join(','):''}</span>`).join('')+'</div>';
+    }
+    $('#cfg-infra').innerHTML=`<table>${kv({'PostgreSQL hosts':u.pg_hosts.join(', '),'PG user':u.pg_user,'HAProxy stats':u.haproxy_stats})}</table>`;
+  }catch(e){ $('#cfg-ui').innerHTML='<span class="muted">'+e.message+'</span>'; }
+  loadKeyCustody();
+}
+const ROLEBADGE={admin:['admin','var(--ok)'],operator:['operator','var(--warn)'],viewer:['viewer','#8b949e']};
+async function checkRole(tok){
+  const el=$('#role-badge'); if(!tok){ el.textContent=''; return; }
+  try{
+    const d=await j('/api/whoami',{headers:{'X-Auth-Token':tok}});
+    if(!d.role){ el.innerHTML='<span class="pill critical">token inválido</span>'; return; }
+    const b=ROLEBADGE[d.role]||[d.role,'inherit'];
+    el.innerHTML=`rol: <span class="pill" style="background:${b[1]};color:#0d1117">${b[0]}</span>`;
+  }catch(e){ el.textContent=''; }
+}
+async function saveClaims(){
+  const m=$('#cl-msg'); m.textContent='Guardando…';
+  try{
+    const r=await fetch('/api/provisioner-claims',{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':$('#cl-token').value},
+      body:JSON.stringify({issuer:'default',provisioner:$('#cl-prov').value,x509_min:$('#cl-min').value,x509_default:$('#cl-def').value,x509_max:$('#cl-max').value})});
+    if(!r.ok){ m.textContent='❌ '+(await r.text()); return; }
+    m.textContent='✅ Claims actualizados'; loadSettings();
+  }catch(e){ m.textContent='❌ '+e.message; }
+}
+async function loadKeyCustody(){
+  try{
+    const d=await j('/api/key-custody');
+    const badge=(it)=>{
+      if(it.hsm_backed===true) return '<span class="pill ok">HSM/KMS</span>';
+      if(it.hsm_backed===false) return '<span class="pill warning">software</span>';
+      return '<span class="pill">n/d</span>';
+    };
+    const online=(it)=> it.online===true?' · <span class="pill critical">online</span>'
+      : it.online===false?' · <span class="pill ok">offline</span>':'';
+    $('#cfg-custody').innerHTML='<table><tr><th>CA</th><th>Protección</th><th>Nota</th></tr>'+
+      d.items.map(it=>`<tr><td><b>${it.ca}</b></td><td>${badge(it)}${online(it)}</td>
+        <td class="muted" style="font-size:12px">${it.note||''}</td></tr>`).join('')+'</table>';
+    $('#cfg-custody-note').textContent='ℹ️ '+d.recommend;
+  }catch(e){ $('#cfg-custody').innerHTML='<span class="muted">'+e.message+'</span>'; }
+}
+async function saveUiCfg(){
+  const m=$('#cf-msg'); m.textContent='Guardando…';
+  try{
+    const r=await fetch('/api/settings/ui',{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':$('#cf-token').value},
+      body:JSON.stringify({cert_warn_h:parseFloat($('#cf-warn').value),cert_crit_h:parseFloat($('#cf-crit').value),webhook_url:$('#cf-webhook').value})});
+    if(!r.ok){ m.textContent='❌ '+(await r.text()); return; }
+    m.textContent='✅ Guardado'; loadCerts(); loadSettings();
+  }catch(e){ m.textContent='❌ '+e.message; }
+}
+async function testWebhook(){
+  const m=$('#cf-msg'); m.textContent='Enviando prueba…';
+  try{
+    const r=await fetch('/api/webhook-test',{method:'POST',headers:{'X-Auth-Token':$('#cf-token').value}});
+    if(!r.ok){ m.textContent='❌ '+(await r.text()); return; }
+    const d=await r.json(); m.textContent=(d.ok?'✅':'⚠️')+' Webhook respondió HTTP '+d.status;
+  }catch(e){ m.textContent='❌ '+e.message; }
+}
+async function notifyExpiring(){
+  const m=$('#cf-msg'); m.textContent='Notificando…';
+  const tok=$('#cf-token').value||$('#i-token').value;
+  try{
+    const r=await fetch('/api/notify-expiring',{method:'POST',headers:{'X-Auth-Token':tok}});
+    if(!r.ok){ m.textContent='❌ '+(await r.text()); return; }
+    const d=await r.json(); m.textContent=(d.ok?'✅':'⚠️')+` Notificados ${d.notified} cert(s) por vencer · webhook HTTP ${d.status}`;
+  }catch(e){ m.textContent='❌ '+e.message; }
+}
+async function loadHaproxy(){
+  try{
+    const d=await j('/api/haproxy'); const tb=$('#hap tbody'); $('#hap-msg').textContent='';
+    if(!d.ok){ tb.innerHTML=''; $('#hap-msg').textContent='HAProxy no accesible: '+(d.error||''); return; }
+    tb.innerHTML=d.servers.map(s=>{
+      const up=/up/i.test(s.status);
+      return `<tr><td>${s.backend}</td><td>${s.server}</td><td><span class="pill ${up?'ok':'expired'}">${s.status}</span></td></tr>`;
+    }).join('')||'<tr><td colspan=3 class="muted">sin backends</td></tr>';
+  }catch(e){ $('#hap-msg').textContent=e.message; }
+}
+async function loadPg(){
+  try{
+    const d=await j('/api/pg-status');
+    $('#pg').innerHTML=d.map(n=>{
+      if(!n.reachable) return `<div class="ca"><div class="name"><span class="dot bad"></span>${n.host}</div><div class="meta">${n.error||'no accesible'}</div></div>`;
+      const reps=(n.replicas||[]).map(r=>`${r.app}: ${r.state}${r.sync?' ('+r.sync+')':''}`).join('<br>')||'<span class="muted">—</span>';
+      const role=n.role==='primary'?'<span class="pill ok">PRIMARIO</span>':'<span class="pill warning">standby</span>';
+      return `<div class="ca"><div class="name"><span class="dot ok"></span>${n.host} ${role}</div>
+        <div class="meta">${n.role==='primary'?'Réplicas conectadas:':'Recepción WAL:'}<br>${reps}</div></div>`;
+    }).join('');
+  }catch(e){ $('#pg').innerHTML='<span class="muted">'+e.message+'</span>'; }
+}
+async function loadCas(){
+  const d = await j('/api/cas');
+  const card=c=> c.error?`<div class="ca"><div class="name">${c.label}</div><div class="meta">${c.error}</div></div>`:`
+    <div class="ca"><div class="name">${c.label}</div><div class="meta">
+      <b>Subject:</b> ${c.subject}<br><b>Issuer:</b> ${c.issuer}<br>
+      <b>Vence:</b> ${c.not_after.slice(0,10)} (${c.days_left} días)<br>
+      <b>SHA256:</b> <code>${c.fingerprint.slice(0,29)}…</code></div></div>`;
+  ['root','intermediate'].forEach(role=>{
+    const items=d.filter(c=>c.role===role);
+    $('#cas-'+role).innerHTML = items.length? items.map(card).join('') : '<span class="muted">—</span>';
+  });
+}
+const PROTECTED=['web','ra_jwk'];
+let ADMIN=false;
+function provBadge(p, issuer){
+  const ch=p.challenges?' · '+p.challenges.join(','):'';
+  const del=(ADMIN && issuer && !PROTECTED.includes(p.name))
+    ? ` <a href="#" title="eliminar" onclick="delProv('${p.name}','${issuer}');return false" style="color:var(--bad);text-decoration:none">×</a>` : '';
+  return `<span class="badge">${p.name} · ${p.type}${ch}${del}</span>`;
+}
+async function loadProvs(){
+  const d = await j('/api/provisioners'); let h='';
+  for(const [ca,info] of Object.entries(d)){
+    h+=`<div style="margin-bottom:10px"><b>${ca}</b><br>`;
+    if(info && info.error){ h+=`<span class="muted">${info.error}</span>`; }
+    else{ const list=(info&&info.provisioners)||[];
+      h+= list.length? list.map(p=>provBadge(p,info.issuer)).join('') : '<span class="muted">— sin provisioners —</span>'; }
+    h+='</div>';
+  }
+  $('#provs').innerHTML=h;
+}
+function provTypeChanged(){
+  const t=$('#p-type').value;
+  ['acme','jwk','x5c','scep','oidc'].forEach(k=>{
+    $('#pf-'+k).style.display = (t.toLowerCase()===k)?'':'none';
+  });
+}
+async function addProv(){
+  const out=$('#provOut'); out.style.display='block'; out.textContent='Agregando…';
+  const t=$('#p-type').value;
+  const body={name:$('#p-name').value,issuer:$('#p-issuer').value,ptype:t};
+  if(t==='ACME') body.challenges=[...document.querySelectorAll('#p-challs input:checked')].map(c=>c.value);
+  if(t==='JWK') body.jwk_password=$('#p-jwkpw').value;
+  if(t==='X5C') body.x5c_root_pem=$('#p-x5c').value;
+  if(t==='SCEP') body.scep_challenge=$('#p-scep').value;
+  if(t==='OIDC'){ body.client_id=$('#p-oidc-id').value; body.client_secret=$('#p-oidc-secret').value; body.config_endpoint=$('#p-oidc-cfg').value; }
+  try{
+    const r=await fetch('/api/provisioners',{method:'POST',
+      headers:{'Content-Type':'application/json','X-Auth-Token':$('#p-token').value},
+      body:JSON.stringify(body)});
+    if(!r.ok){out.textContent='❌ '+(await r.text());return;}
+    const d=await r.json(); out.textContent='✅ '+d.output; loadProvs();
+  }catch(e){out.textContent='❌ '+e.message;}
+}
+async function delProv(name,issuer){
+  if(!confirm('¿Eliminar el provisioner '+name+' de '+issuer+'?')) return;
+  const tok=$('#p-token').value||prompt('Token de operador:');
+  if(!tok) return;
+  try{
+    const r=await fetch('/api/provisioners/'+encodeURIComponent(name)+'?issuer='+encodeURIComponent(issuer||'default'),{method:'DELETE',headers:{'X-Auth-Token':tok}});
+    if(!r.ok){alert('❌ '+(await r.text()));return;}
+    loadProvs();
+  }catch(e){alert('❌ '+e.message);}
+}
+const STLABEL={ok:'vigente',warning:'por vencer',critical:'crítico',expired:'vencido'};
+async function revokeCert(file){
+  if(!confirm('¿Revocar el certificado '+file+'? (revocación pasiva)')) return;
+  const tok=$('#i-token').value||$('#p-token').value||prompt('Token de operador:');
+  if(!tok) return;
+  try{
+    const r=await fetch('/api/revoke',{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':tok},
+      body:JSON.stringify({file,issuer:'default'})});
+    if(!r.ok){alert('❌ '+(await r.text()));return;}
+    const d=await r.json(); alert('✅ Revocado (serial '+d.serial+')'); loadCerts();
+  }catch(e){alert('❌ '+e.message);}
+}
+const EVLABEL={issued:['emitido','var(--ok)'],revoked:['revocado','var(--bad)'],warn:['aviso','var(--warn)'],
+  'prov-add':['prov +','var(--accent)'],'prov-remove':['prov −','var(--warn)']};
+async function loadAudit(){
+  const tb=$('#audit-tbl tbody');
+  try{
+    const d=await j('/api/audit');
+    $('#audit-count').textContent=d.count+' eventos';
+    if(!d.events.length){ tb.innerHTML=''; $('#audit-tbl').style.display='none'; $('#audit-empty').style.display='block'; return; }
+    $('#audit-tbl').style.display=''; $('#audit-empty').style.display='none';
+    tb.innerHTML=d.events.map(e=>{
+      const lb=EVLABEL[e.type]||[e.type,'inherit'];
+      const ser=e.serial?`<code>${e.serial.slice(0,16)}…</code>`:'';
+      return `<tr><td class="muted">${(e.ts||'').replace('T',' ').slice(0,19)}</td>
+        <td><span class="pill" style="background:${lb[1]};color:#0d1117">${lb[0]}</span></td>
+        <td>${e.subject||'—'}</td><td>${ser}</td><td class="muted">${e.detail||''}</td></tr>`;
+    }).join('');
+  }catch(e){ tb.innerHTML=`<tr><td colspan="5" class="muted">❌ ${e.message}</td></tr>`; }
+}
+async function loadCrl(){
+  const iss=$('#crl-issuer').value||'default';
+  $('#crl-dl').href='/api/crl?issuer='+encodeURIComponent(iss);
+  const el=$('#crl-info'); el.innerHTML='<span class="muted">Cargando…</span>';
+  try{
+    const d=await j('/api/crl-info?issuer='+encodeURIComponent(iss));
+    if(!d.enabled){ el.innerHTML='<span class="muted">CRL no habilitado en esta CA'+(d.error?' ('+d.error+')':'')+'</span>'; return; }
+    let h='<table>'+kv({'Revocados':d.count,
+      'Última actualización':(d.this_update||'').replace('T',' ').slice(0,19),
+      'Próxima actualización':(d.next_update||'').replace('T',' ').slice(0,19)})+'</table>';
+    if(d.revoked&&d.revoked.length){
+      h+='<div style="margin-top:8px;max-height:220px;overflow:auto"><table><tr><th>Serial (hex)</th><th>Revocado</th></tr>'+
+        d.revoked.map(r=>`<tr><td><code>${r.serial}</code></td><td class="muted">${(r.revoked_at||'').replace('T',' ').slice(0,19)}</td></tr>`).join('')+'</table></div>';
+    } else { h+='<span class="muted">— sin certificados revocados —</span>'; }
+    el.innerHTML=h;
+  }catch(e){ el.innerHTML='<span class="muted">❌ '+e.message+'</span>'; }
+}
+function closeCertModal(){ $('#cert-modal').style.display='none'; }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeCertModal(); });
+async function certDetail(file){
+  const out=$('#cert-detail'); $('#cert-modal').style.display='flex';
+  $('#cert-modal-title').textContent='Detalle · '+file; out.textContent='Cargando…';
+  try{
+    const c=await j('/api/cert-inspect?file='+encodeURIComponent(file));
+    out.textContent=
+      'Common Name : '+(c.common_name||'—')+'\n'+
+      'SANs        : '+(c.sans||[]).join(', ')+'\n'+
+      'Issuer      : '+c.issuer+'\n'+
+      'Serial      : '+c.serial+'\n'+
+      'Válido      : '+c.not_before.replace('T',' ').slice(0,19)+'  →  '+c.not_after.replace('T',' ').slice(0,19)+'  ('+c.expires_in+')\n'+
+      'Clave       : '+c.key_type+'    Firma: '+(c.signature_algorithm||'')+'\n'+
+      'Key Usage   : '+(c.key_usage||[]).join(', ')+'\n'+
+      'Ext KeyUsage: '+(c.extended_key_usage||[]).join(', ')+'\n'+
+      (c.basic_constraints?('Basic Constr: CA='+c.basic_constraints.ca+(c.basic_constraints.path_len!=null?' pathlen='+c.basic_constraints.path_len:'')+'\n'):'')+
+      'SHA-256     : '+c.fingerprint;
+  }catch(e){ out.textContent='❌ '+e.message; }
+}
+let ALLCERTS=[], FILTERED=[], CERT_PAGE=1; const PAGE_SIZE=10;
+function setCertFilter(st){ $('#cert-filter').value=st; CERT_PAGE=1; renderCerts(); }
+function certFilterChanged(){ CERT_PAGE=1; renderCerts(); }
+function gotoCertPage(p){ CERT_PAGE=p; renderCerts(); }
+async function bulkRevoke(){
+  const files=FILTERED.filter(c=>c.file).map(c=>c.file);
+  if(!files.length){ alert('No hay certificados (con archivo) en el filtro actual.'); return; }
+  if(!confirm(`¿Revocar ${files.length} certificado(s) filtrado(s)? Esta acción no se puede deshacer.`)) return;
+  if(prompt(`Para confirmar, escribí REVOCAR (${files.length} certs):`)!=='REVOCAR') return;
+  const tok=$('#i-token').value||prompt('Token de operador:'); if(!tok) return;
+  const out=$('#bulk-out'); out.style.display='block'; out.textContent=`Revocando ${files.length}…`;
+  try{
+    const r=await fetch('/api/revoke-bulk',{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':tok},
+      body:JSON.stringify({files,issuer:'default'})});
+    if(!r.ok){ out.textContent='❌ '+(await r.text()); return; }
+    const d=await r.json();
+    out.textContent=`✅ Revocados: ${d.revoked} · fallidos: ${d.failed}`+
+      (d.failed?(' — '+d.results.filter(x=>!x.ok).slice(0,3).map(x=>x.file+': '+x.error).join(' | ')):'');
+    loadCerts();
+  }catch(e){ out.textContent='❌ '+e.message; }
+}
+async function loadCerts(){
+  const d = await j('/api/certificates'); const s=d.summary; ALLCERTS=d.certificates;
+  const chip=(st,col,lbl,n)=>`<span class="chip" onclick="setCertFilter('${st}')" style="cursor:pointer;color:${col}"><b>${n}</b> ${lbl}</span>`;
+  $('#certsum').innerHTML =
+    chip('','inherit','total',s.total)+
+    chip('ok','var(--ok)','vigentes',s.ok)+
+    chip('warning','var(--warn)','por vencer',s.warning)+
+    chip('critical','#ffa198','críticos',s.critical)+
+    chip('expired','var(--bad)','vencidos',s.expired);
+  renderCerts();
+}
+function renderCerts(){
+  const q=($('#cert-q').value||'').toLowerCase().trim();
+  const f=$('#cert-filter').value;
+  const rows=ALLCERTS.filter(c=>{
+    if(f && c.status!==f) return false;
+    if(!q) return true;
+    return (c.common_name||'').toLowerCase().includes(q)
+      || (c.sans||[]).some(s=>s.toLowerCase().includes(q))
+      || (c.serial||'').toLowerCase().includes(q);
+  });
+  FILTERED=rows;
+  $('#cert-count').textContent=`${rows.length} de ${ALLCERTS.length}`;
+  $('#bulk-wrap').style.display=ADMIN?'':'none';
+  const tb=$('#certs tbody');
+  if(!ALLCERTS.length){tb.innerHTML='';$('#certs').style.display='none';$('#certempty').style.display='block';$('#cert-pager').innerHTML='';return;}
+  $('#certs').style.display='';$('#certempty').style.display='none';
+  const pages=Math.max(1,Math.ceil(rows.length/PAGE_SIZE));
+  if(CERT_PAGE>pages) CERT_PAGE=pages;
+  const pageRows=rows.slice((CERT_PAGE-1)*PAGE_SIZE, CERT_PAGE*PAGE_SIZE);
+  $('#cert-pager').innerHTML = pages<=1 ? '' :
+    `<button class="ghost" ${CERT_PAGE<=1?'disabled':''} onclick="gotoCertPage(${CERT_PAGE-1})">‹ Anterior</button>`+
+    `<span class="muted" style="font-size:12px">Página ${CERT_PAGE} de ${pages}</span>`+
+    `<button class="ghost" ${CERT_PAGE>=pages?'disabled':''} onclick="gotoCertPage(${CERT_PAGE+1})">Siguiente ›</button>`;
+  tb.innerHTML = pageRows.map(c=>{
+    const sans=c.sans.length?`<div class="muted" style="font-size:11px">${c.sans.join(', ')}</div>`:'';
+    const rev=(ADMIN&&c.file)?` <a href="#" title="revocar" onclick="revokeCert('${(c.file||'').replace(/'/g,"")}');return false" style="text-decoration:none">🚫</a>`:'';
+    const dl=c.file?` <a href="/api/cert-file?file=${encodeURIComponent(c.file)}" title="descargar">⬇</a> <a href="#" title="ver detalle" onclick="certDetail('${(c.file||'').replace(/'/g,"")}');return false">🔍</a>${rev}`:'';
+    return `<tr><td><b>${c.common_name||'—'}</b>${sans}</td>
+      <td><span class="pill ${c.status}">${STLABEL[c.status]||c.status}</span></td>
+      <td>${c.expires_in}<div class="muted" style="font-size:11px">${c.not_after.slice(0,16).replace('T',' ')}</div></td>
+      <td class="muted">${c.not_before.slice(0,16).replace('T',' ')}</td>
+      <td class="muted">${c.key_type}</td><td><code>${c.serial.slice(0,16)}…</code>${dl}</td></tr>`;
+  }).join('');
+}
+
+// ── perfiles (templates) que autocompletan ──
+let PROFILES_DATA={};
+function applyProfile(){
+  const p=PROFILES_DATA[$('#i-profile').value]; if(!p) return;
+  if(p.key_type){ $('#i-kty').value=p.key_type; syncKey('i'); }
+  if(p.key_param) $('#i-kparam').value=p.key_param;
+  if(p.duration) $('#i-notafter').value=p.duration;
+  $('#profile-desc').textContent=p.desc||'';
+}
+// ── opciones de clave ──
+let KEYTYPES={};
+function fillKty(prefix){
+  $('#'+prefix+'-kty').innerHTML=Object.keys(KEYTYPES).map(k=>`<option>${k}</option>`).join('');
+  syncKey(prefix);
+}
+function syncKey(prefix){
+  const kty=$('#'+prefix+'-kty').value;
+  $('#'+prefix+'-kparam').innerHTML=(KEYTYPES[kty]||[]).map(v=>`<option>${v}</option>`).join('');
+}
+
+// ── emitir ──
+async function issue(){
+  const out=$('#issueOut'); out.style.display='block'; out.textContent='Emitiendo…';
+  const sans=$('#i-sans').value.split(',').map(s=>s.trim()).filter(Boolean);
+  try{
+    const r=await fetch('/api/issue',{method:'POST',
+      headers:{'Content-Type':'application/json','X-Auth-Token':$('#i-token').value},
+      body:JSON.stringify({domain:$('#i-domain').value,issuer:$('#i-issuer').value,profile:$('#i-profile').value,
+        key_type:$('#i-kty').value,key_param:$('#i-kparam').value,not_after:$('#i-notafter').value,sans})});
+    if(!r.ok){out.textContent='❌ '+(await r.text());return;}
+    const d=await r.json();
+    out.textContent=(d.ok?'✅ Certificado emitido\n\n':'⚠️ Revisar salida\n\n')+d.output;
+    if(d.ok) loadCerts();
+  }catch(e){out.textContent='❌ '+e.message;}
+}
+
+// ── CSR (templates que autocompletan) ──
+const CSR_TEMPLATES={
+  'leaf-server':{mode:'leaf',cn:'servicio.empresa.com',kty:'EC',kparam:'P-256',
+    desc:'Hoja para un servicio HTTPS. La firma la decide la CA; aquí sólo se arma el CSR + la clave.'},
+  'leaf-client':{mode:'leaf',cn:'cliente.empresa.com',kty:'EC',kparam:'P-256',
+    desc:'Hoja para autenticar un cliente/usuario/dispositivo (lado cliente de mTLS).'},
+  'sub-ca':{mode:'sub-ca',cn:'Empresa Issuing CA',kty:'RSA',kparam:'4096',
+    desc:'CSR de sub-CA (CA:true, keyCertSign+cRLSign). Firmalo con la plantilla Subordinate CA de ADCS y luego importá la cadena.'},
+};
+function applyCsrTemplate(){
+  const t=CSR_TEMPLATES[$('#c-template').value]; if(!t) return;
+  const sub=t.mode==='sub-ca';
+  $('#c-sans-wrap').style.display=sub?'none':'';
+  $('#c-pl-wrap').style.display=sub?'':'none';
+  $('#c-subca-note').style.display=sub?'block':'none';
+  $('#c-cn-lbl').firstChild.textContent=sub?'Nombre de la sub-CA (CN) ':'Common Name (FQDN) ';
+  $('#c-cn').value=t.cn; $('#c-kty').value=t.kty; syncKey('c'); $('#c-kparam').value=t.kparam;
+  $('#csr-desc').textContent=t.desc;
+}
+let CSR={};
+async function genCsr(){
+  $('#csr-result').style.display='none'; $('#csrErr').style.display='none';
+  const sans=$('#c-sans').value.split(',').map(s=>s.trim()).filter(Boolean);
+  try{
+    const d=await j('/api/csr',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({common_name:$('#c-cn').value,mode:(CSR_TEMPLATES[$('#c-template').value]||{}).mode||'leaf',sans,
+        key_type:$('#c-kty').value,key_param:$('#c-kparam').value,path_len:parseInt($('#c-pl').value||'0')})});
+    CSR=d; $('#csrOut').textContent=d.csr; $('#csr-result').style.display='block';
+  }catch(e){$('#csrErr').style.display='block';$('#csrErr').textContent='❌ '+e.message;}
+}
+function dl(kind){
+  const blob=new Blob([CSR[kind]],{type:'application/x-pem-file'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=CSR.filename+(kind==='csr'?'.csr':'.key'); a.click();
+}
+
+async function init(){
+  // perfiles, tipos de clave y CAs emisoras
+  try{const pf=await j('/api/profiles');
+    KEYTYPES=pf.key_types; PROFILES_DATA=pf.profiles;
+    $('#i-profile').innerHTML=Object.entries(pf.profiles).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('');
+    fillKty('i'); fillKty('c'); applyProfile(); applyCsrTemplate();
+  }catch(e){}
+  try{const iss=await j('/api/issuers');
+    const opts=iss.map(i=>`<option value="${i.id}">${i.label}</option>`).join('');
+    $('#i-issuer').innerHTML=opts; $('#p-issuer').innerHTML=opts; $('#crl-issuer').innerHTML=opts;
+  }catch(e){}
+  // emisión / gestión habilitada?
+  let issueOn=false;
+  try{const cfg=await j('/api/config');issueOn=!!cfg.issue_enabled;}catch(e){}
+  ADMIN=issueOn;
+  $('#mode').textContent=issueOn?'🟢 emisión + gestión (token)':'🔒 sólo lectura';
+  $('#issue-form').style.display=issueOn?'':'none';
+  $('#issue-disabled').style.display=issueOn?'none':'block';
+  $('#prov-manage').style.display=issueOn?'':'none';
+  $('#int-add').style.display=issueOn?'':'none';
+  $('#p-challs').innerHTML=['http-01','dns-01','tls-alpn-01','device-attest-01']
+    .map(c=>`<label style="display:flex;gap:4px;align-items:center;margin:0"><input type="checkbox" value="${c}" style="width:auto"> ${c}</label>`).join('');
+  // carga inicial + refresh
+  function tick(){loadStatus();loadCerts();loadHaproxy();loadPg();}
+  tick();loadCas();loadProvs();loadSettings();loadCrl();loadIntermediates();
+  setInterval(loadIntermediates,8000);
+  setInterval(tick,5000);setInterval(loadProvs,15000);setInterval(loadSettings,30000);
+}
+init();
+</script>
+</body>
+</html>
