@@ -105,7 +105,8 @@ cat > "${INT_CFG}" <<EOF
     "provisioners": [
       { "type": "JWK", "name": "ra_jwk", "key": ${PUBJWK} },
       { "type": "JWK", "name": "web", "key": ${WEB_PUB}, "encryptedKey": "${WEB_EK}",
-        "policy": { "x509": { "allow": { "dns": ["*.local"] }, "allowWildcardNames": false } } }
+        "policy": { "x509": { "allow": { "dns": ["*.local"] }, "allowWildcardNames": false } },
+        "options": { "x509": { "templateFile": "/home/step/templates/web-leaf.tpl" } } }
     ]
   }
 }

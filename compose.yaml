@@ -137,6 +137,7 @@ services:
       - intermediate-secrets:/home/step/secrets
       - ./scripts/init-intermediate.sh:/scripts/init-intermediate.sh:ro
       - ./persistent/root/certs:/home/step/root_certs:ro
+      - ./infra/stepca/templates:/home/step/templates:ro
       - intermediate-tmp:/tmp/intermediate_tmp/:ro
     secrets:
       - source: intermediate_ca_password

@@ -12,16 +12,25 @@
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);
     font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-  header{display:flex;align-items:center;gap:12px;padding:16px 24px;
+  header{display:flex;align-items:center;gap:12px;padding:14px 24px;
     border-bottom:1px solid var(--border);background:var(--panel)}
-  header h1{font-size:18px;margin:0;font-weight:600}
+  header h1{font-size:17px;margin:0;font-weight:600}
   header .sub{color:var(--muted);font-size:12px}
   .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
   .dot.ok{background:var(--ok)} .dot.bad{background:var(--bad)} .dot.warn{background:var(--warn)}
-  main{max-width:1100px;margin:0 auto;padding:24px;display:grid;gap:24px}
-  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px}
+  .layout{display:flex;min-height:calc(100vh - 52px)}
+  nav{width:210px;border-right:1px solid var(--border);background:var(--panel);padding:14px 10px;flex-shrink:0}
+  nav button{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:transparent;
+    color:var(--text);border:0;border-radius:8px;padding:9px 12px;cursor:pointer;font-size:14px;margin-bottom:2px}
+  nav button:hover{background:#1f2630}
+  nav button.active{background:var(--accent);color:#fff}
+  nav .ico{width:18px;text-align:center}
+  main{flex:1;padding:24px;max-width:980px}
+  section{display:none}
+  section.active{display:block}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:18px}
   .card h2{margin:0 0 14px;font-size:14px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
-  .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+  .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
   .ca{border:1px solid var(--border);border-radius:8px;padding:14px;background:#0d1117}
   .ca .name{font-weight:600;display:flex;align-items:center;gap:8px}
   .ca .meta{color:var(--muted);font-size:12px;margin-top:6px}
@@ -29,160 +38,245 @@
   th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
   th{color:var(--muted);font-weight:500;font-size:12px}
   code{background:#0d1117;border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-size:12px;word-break:break-all}
-  button{background:#21262d;color:var(--text);border:1px solid var(--border);border-radius:6px;
-    padding:5px 10px;cursor:pointer;font-size:12px}
-  button:hover{border-color:var(--accent)}
-  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-  button.danger:hover{border-color:var(--bad);color:var(--bad)}
-  input,select{background:#0d1117;border:1px solid var(--border);color:var(--text);
-    border-radius:6px;padding:7px 10px;font-size:13px}
-  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-  pre{background:#0d1117;border:1px solid var(--border);border-radius:8px;padding:12px;
-    overflow:auto;max-height:340px;font-size:12px;margin:10px 0 0}
-  .badge{display:inline-block;background:#1f2937;border:1px solid var(--border);border-radius:20px;
-    padding:1px 9px;font-size:11px;margin:2px 3px 0 0;color:#c9d1d9}
+  label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+  button.primary{background:var(--accent);border:1px solid var(--accent);color:#fff;border-radius:6px;padding:8px 14px;cursor:pointer}
+  button.ghost{background:#21262d;color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px}
+  button:hover{filter:brightness(1.1)}
+  input,select{background:#0d1117;border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:13px;width:100%}
+  .row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+  .row>div{flex:1;min-width:160px}
+  pre{background:#0d1117;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;max-height:340px;font-size:12px;margin:12px 0 0}
+  .badge{display:inline-block;background:#1f2937;border:1px solid var(--border);border-radius:20px;padding:1px 9px;font-size:11px;margin:2px 3px 0 0;color:#c9d1d9}
   .pill{padding:1px 8px;border-radius:20px;font-size:11px}
-  .pill.run,.pill.ok{background:rgba(63,185,80,.15);color:var(--ok)}
-  .pill.stop,.pill.expired{background:rgba(248,81,73,.15);color:var(--bad)}
-  .pill.absent{background:#21262d;color:var(--muted)}
+  .pill.ok{background:rgba(63,185,80,.15);color:var(--ok)}
+  .pill.expired{background:rgba(248,81,73,.15);color:var(--bad)}
   .pill.warning{background:rgba(210,153,34,.18);color:var(--warn)}
   .pill.critical{background:rgba(248,81,73,.18);color:#ffa198}
   .chip{padding:4px 12px;border-radius:8px;font-size:12px;border:1px solid var(--border);background:#0d1117}
   .chip b{font-size:15px}
-  a{color:var(--accent)}
-  .muted{color:var(--muted)}
+  a{color:var(--accent)} .muted{color:var(--muted)}
 </style>
 </head>
 <body>
 <header>
   <span id="overall" class="dot warn"></span>
-  <div>
-    <h1>stepca · administración de la PKI</h1>
-    <div class="sub">Root → Intermediate → RA (ACME) · actualiza cada 5s</div>
-  </div>
+  <div><h1>stepca · administración de la PKI</h1>
+    <div class="sub">Root → Intermediate (HA) → RA (ACME) · PostgreSQL + HAProxy</div></div>
   <span id="mode" class="badge" style="margin-left:auto"></span>
 </header>
-<main>
-  <div class="card">
-    <h2>Estado de las CAs</h2>
-    <div id="status" class="grid"></div>
-  </div>
 
-  <div class="card">
-    <h2>Certificados de las CAs</h2>
-    <div id="cas" class="grid"></div>
-    <div class="row" style="margin-top:12px">
-      <a href="/api/root.crt"><button>⬇ Descargar root_ca.crt</button></a>
-    </div>
-  </div>
+<div class="layout">
+  <nav id="nav">
+    <button data-sec="estado" class="active"><span class="ico">📊</span> Estado</button>
+    <button data-sec="cas"><span class="ico">📜</span> CAs</button>
+    <button data-sec="provs"><span class="ico">🔑</span> Provisioners</button>
+    <button data-sec="emitir"><span class="ico">➕</span> Emitir</button>
+    <button data-sec="csr"><span class="ico">📝</span> Generar CSR</button>
+    <button data-sec="inv"><span class="ico">🗂️</span> Inventario</button>
+  </nav>
 
-  <div class="card">
-    <h2>Provisioners</h2>
-    <div id="provs"></div>
-  </div>
+  <main>
+    <!-- ESTADO -->
+    <section id="sec-estado" class="active">
+      <div class="card"><h2>Estado de las CAs</h2><div id="status" class="grid"></div></div>
+    </section>
 
-  <div class="card">
-    <h2>Certificados emitidos</h2>
-    <div id="certsum" class="row" style="margin-bottom:12px"></div>
-    <table id="certs"><thead><tr>
-      <th>Common Name / SANs</th><th>Estado</th><th>Vence en</th>
-      <th>Emitido</th><th>Tipo</th><th>Serial</th>
-    </tr></thead><tbody></tbody></table>
-    <div id="certempty" class="muted" style="display:none">
-      Sin certificados en el inventario. Se llenan al emitir desde la UI o cuando los
-      demos depositan el cert en <code>persistent/issued/</code>.
-    </div>
-  </div>
+    <!-- CAs -->
+    <section id="sec-cas">
+      <div class="card"><h2>Certificados de las CAs</h2>
+        <div id="cas" class="grid"></div>
+        <div style="margin-top:12px"><a href="/api/root.crt"><button class="ghost">⬇ Descargar root_ca.crt</button></a></div>
+      </div>
+    </section>
 
-  <div class="card" id="card-issue" style="display:none">
-    <h2>Emitir certificado (provisioner web · API autenticada)</h2>
-    <div class="row">
-      <input id="domain" placeholder="miapp.local" value="miapp.local" style="min-width:200px">
-      <input id="token" type="password" placeholder="token de operador" style="min-width:200px">
-      <button class="primary" onclick="issue()">Emitir</button>
-      <span class="muted">Sólo <code>*.local</code> · sin socket de Docker</span>
-    </div>
-    <pre id="issueOut" style="display:none"></pre>
-  </div>
-</main>
+    <!-- PROVISIONERS -->
+    <section id="sec-provs">
+      <div class="card"><h2>Provisioners por CA</h2><div id="provs"></div>
+        <div class="muted" style="font-size:12px;margin-top:10px">
+          La gestión (alta/baja) se hace de forma autenticada vía la Admin API de step-ca
+          (<code>enableAdmin</code>) o regenerando la config — ver docs/secure-access.md.
+        </div>
+      </div>
+    </section>
+
+    <!-- EMITIR -->
+    <section id="sec-emitir">
+      <div class="card"><h2>Emitir certificado</h2>
+        <div id="issue-disabled" class="muted" style="display:none">
+          Emisión deshabilitada. Definí <code>UI_TOKEN</code> en <code>.env</code> y <code>make up</code>.
+        </div>
+        <div id="issue-form">
+          <div class="row">
+            <div><label>Nombre (CN) · *.local</label><input id="i-domain" value="miapp.local"></div>
+            <div><label>Perfil de uso</label><select id="i-profile"></select></div>
+          </div>
+          <div class="row">
+            <div><label>Tipo de clave</label><select id="i-kty" onchange="syncKey('i')"></select></div>
+            <div><label>Curva / tamaño</label><select id="i-kparam"></select></div>
+            <div><label>SANs adicionales (coma)</label><input id="i-sans" placeholder="alt1.local, alt2.local"></div>
+          </div>
+          <div class="row">
+            <div><label>Token de operador</label><input id="i-token" type="password" placeholder="UI_TOKEN"></div>
+            <div style="flex:0"><label>&nbsp;</label><button class="primary" onclick="issue()">Emitir</button></div>
+          </div>
+          <pre id="issueOut" style="display:none"></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- CSR -->
+    <section id="sec-csr">
+      <div class="card"><h2>Generar CSR + clave (descargable)</h2>
+        <div class="muted" style="font-size:12px;margin-bottom:6px">Material local; no toca la PKI. Útil para firmar con cualquier CA.</div>
+        <div class="row">
+          <div><label>Common Name (FQDN)</label><input id="c-cn" value="servicio.empresa.com"></div>
+          <div><label>SANs (coma)</label><input id="c-sans" placeholder="www.empresa.com, api.empresa.com"></div>
+        </div>
+        <div class="row">
+          <div><label>Tipo de clave</label><select id="c-kty" onchange="syncKey('c')"></select></div>
+          <div><label>Curva / tamaño</label><select id="c-kparam"></select></div>
+          <div style="flex:0"><label>&nbsp;</label><button class="primary" onclick="genCsr()">Generar</button></div>
+        </div>
+        <div id="csr-result" style="display:none">
+          <div class="row" style="margin-top:12px">
+            <button class="ghost" onclick="dl('csr')">⬇ Descargar .csr</button>
+            <button class="ghost" onclick="dl('key')">⬇ Descargar .key</button>
+          </div>
+          <pre id="csrOut"></pre>
+        </div>
+        <pre id="csrErr" style="display:none"></pre>
+      </div>
+    </section>
+
+    <!-- INVENTARIO -->
+    <section id="sec-inv">
+      <div class="card"><h2>Certificados emitidos</h2>
+        <div id="certsum" class="row" style="margin-bottom:12px"></div>
+        <table id="certs"><thead><tr>
+          <th>Common Name / SANs</th><th>Estado</th><th>Vence en</th><th>Emitido</th><th>Tipo</th><th>Serial</th>
+        </tr></thead><tbody></tbody></table>
+        <div id="certempty" class="muted" style="display:none">Sin certificados en el inventario.</div>
+      </div>
+    </section>
+  </main>
+</div>
 
 <script>
 const $ = s => document.querySelector(s);
 async function j(u,o){const r=await fetch(u,o);if(!r.ok)throw new Error(await r.text());return r.json();}
 
+// ── navegación por secciones ──
+document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#nav button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));
+  $('#sec-'+b.dataset.sec).classList.add('active');
+});
+
 async function loadStatus(){
   const d = await j('/api/status');
-  $('#status').innerHTML = d.map(c=>`
-    <div class="ca"><div class="name"><span class="dot ${c.healthy?'ok':'bad'}"></span>${c.label}</div>
+  $('#status').innerHTML = d.map(c=>`<div class="ca"><div class="name"><span class="dot ${c.healthy?'ok':'bad'}"></span>${c.label}</div>
     <div class="meta">${c.name}<br>puerto host :${c.host_port} · ${c.healthy?'healthy':'caído'}</div></div>`).join('');
-  const allok = d.every(c=>c.healthy);
-  $('#overall').className = 'dot '+(allok?'ok':(d.some(c=>c.healthy)?'warn':'bad'));
+  $('#overall').className='dot '+(d.every(c=>c.healthy)?'ok':(d.some(c=>c.healthy)?'warn':'bad'));
 }
 async function loadCas(){
   const d = await j('/api/cas');
   $('#cas').innerHTML = d.map(c=> c.error?`<div class="ca"><div class="name">${c.label}</div><div class="meta">${c.error}</div></div>`:`
-    <div class="ca"><div class="name">${c.label}</div>
-    <div class="meta">
-      <b>Subject:</b> ${c.subject}<br>
-      <b>Issuer:</b> ${c.issuer}<br>
+    <div class="ca"><div class="name">${c.label}</div><div class="meta">
+      <b>Subject:</b> ${c.subject}<br><b>Issuer:</b> ${c.issuer}<br>
       <b>Vence:</b> ${c.not_after.slice(0,10)} (${c.days_left} días)<br>
-      <b>SHA256:</b> <code>${c.fingerprint.slice(0,29)}…</code>
-    </div></div>`).join('');
+      <b>SHA256:</b> <code>${c.fingerprint.slice(0,29)}…</code></div></div>`).join('');
 }
 async function loadProvs(){
-  const d = await j('/api/provisioners');
-  let h='';
+  const d = await j('/api/provisioners'); let h='';
   for(const [ca,list] of Object.entries(d)){
     h+=`<div style="margin-bottom:10px"><b>${ca}</b><br>`;
-    if(Array.isArray(list)){
-      h+= list.length? list.map(p=>`<span class="badge">${p.name} · ${p.type}${p.challenges?' · '+p.challenges.join(','):''}</span>`).join('') : '<span class="muted">— sin provisioners —</span>';
-    } else { h+=`<span class="muted">${list.error}</span>`; }
+    h+= Array.isArray(list) ? (list.length? list.map(p=>`<span class="badge">${p.name} · ${p.type}${p.challenges?' · '+p.challenges.join(','):''}</span>`).join('') : '<span class="muted">— sin provisioners —</span>') : `<span class="muted">${list.error}</span>`;
     h+='</div>';
   }
   $('#provs').innerHTML=h;
 }
+const STLABEL={ok:'vigente',warning:'por vencer',critical:'crítico',expired:'vencido'};
+async function loadCerts(){
+  const d = await j('/api/certificates'); const s=d.summary;
+  $('#certsum').innerHTML =
+    `<span class="chip"><b>${s.total}</b> total</span>`+
+    `<span class="chip" style="color:var(--ok)"><b>${s.ok}</b> vigentes</span>`+
+    `<span class="chip" style="color:var(--warn)"><b>${s.warning}</b> por vencer</span>`+
+    `<span class="chip" style="color:#ffa198"><b>${s.critical}</b> críticos</span>`+
+    `<span class="chip" style="color:var(--bad)"><b>${s.expired}</b> vencidos</span>`;
+  const tb=$('#certs tbody');
+  if(!d.certificates.length){tb.innerHTML='';$('#certs').style.display='none';$('#certempty').style.display='block';return;}
+  $('#certs').style.display='';$('#certempty').style.display='none';
+  tb.innerHTML = d.certificates.map(c=>{
+    const sans=c.sans.length?`<div class="muted" style="font-size:11px">${c.sans.join(', ')}</div>`:'';
+    return `<tr><td><b>${c.common_name||'—'}</b>${sans}</td>
+      <td><span class="pill ${c.status}">${STLABEL[c.status]||c.status}</span></td>
+      <td>${c.expires_in}<div class="muted" style="font-size:11px">${c.not_after.slice(0,16).replace('T',' ')}</div></td>
+      <td class="muted">${c.not_before.slice(0,16).replace('T',' ')}</td>
+      <td class="muted">${c.key_type}</td><td><code>${c.serial.slice(0,16)}…</code></td></tr>`;
+  }).join('');
+}
+
+// ── opciones de clave ──
+let KEYTYPES={};
+function fillKty(prefix){
+  $('#'+prefix+'-kty').innerHTML=Object.keys(KEYTYPES).map(k=>`<option>${k}</option>`).join('');
+  syncKey(prefix);
+}
+function syncKey(prefix){
+  const kty=$('#'+prefix+'-kty').value;
+  $('#'+prefix+'-kparam').innerHTML=(KEYTYPES[kty]||[]).map(v=>`<option>${v}</option>`).join('');
+}
+
+// ── emitir ──
 async function issue(){
   const out=$('#issueOut'); out.style.display='block'; out.textContent='Emitiendo…';
+  const sans=$('#i-sans').value.split(',').map(s=>s.trim()).filter(Boolean);
   try{
     const r=await fetch('/api/issue',{method:'POST',
-      headers:{'Content-Type':'application/json','X-Auth-Token':$('#token').value},
-      body:JSON.stringify({domain:$('#domain').value})});
-    if(!r.ok){ out.textContent='❌ '+(await r.text()); return; }
+      headers:{'Content-Type':'application/json','X-Auth-Token':$('#i-token').value},
+      body:JSON.stringify({domain:$('#i-domain').value,profile:$('#i-profile').value,
+        key_type:$('#i-kty').value,key_param:$('#i-kparam').value,sans})});
+    if(!r.ok){out.textContent='❌ '+(await r.text());return;}
     const d=await r.json();
     out.textContent=(d.ok?'✅ Certificado emitido\n\n':'⚠️ Revisar salida\n\n')+d.output;
     if(d.ok) loadCerts();
   }catch(e){out.textContent='❌ '+e.message;}
 }
-const STLABEL={ok:'vigente',warning:'por vencer',critical:'crítico',expired:'vencido'};
-async function loadCerts(){
-  const d = await j('/api/certificates');
-  const s=d.summary;
-  $('#certsum').innerHTML =
-    `<span class="chip"><b>${s.total}</b> total</span>`+
-    `<span class="chip" style="color:var(--ok)"><b>${s.ok}</b> vigentes</span>`+
-    `<span class="chip" style="color:var(--warn)"><b>${s.warning}</b> por vencer (&lt;6h)</span>`+
-    `<span class="chip" style="color:#ffa198"><b>${s.critical}</b> críticos (&lt;2h)</span>`+
-    `<span class="chip" style="color:var(--bad)"><b>${s.expired}</b> vencidos</span>`;
-  const tb=$('#certs tbody');
-  if(!d.certificates.length){ tb.innerHTML=''; $('#certs').style.display='none'; $('#certempty').style.display='block'; return; }
-  $('#certs').style.display=''; $('#certempty').style.display='none';
-  tb.innerHTML = d.certificates.map(c=>{
-    const sans = c.sans.length?`<div class="muted" style="font-size:11px">${c.sans.join(', ')}</div>`:'';
-    return `<tr>
-      <td><b>${c.common_name||'—'}</b>${sans}</td>
-      <td><span class="pill ${c.status}">${STLABEL[c.status]||c.status}</span></td>
-      <td>${c.expires_in}<div class="muted" style="font-size:11px">${c.not_after.slice(0,16).replace('T',' ')}</div></td>
-      <td class="muted">${c.not_before.slice(0,16).replace('T',' ')}</td>
-      <td class="muted">${c.key_type}</td>
-      <td><code>${c.serial.slice(0,16)}…</code></td></tr>`;
-  }).join('');
+
+// ── CSR ──
+let CSR={};
+async function genCsr(){
+  $('#csr-result').style.display='none'; $('#csrErr').style.display='none';
+  const sans=$('#c-sans').value.split(',').map(s=>s.trim()).filter(Boolean);
+  try{
+    const d=await j('/api/csr',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({common_name:$('#c-cn').value,sans,key_type:$('#c-kty').value,key_param:$('#c-kparam').value})});
+    CSR=d; $('#csrOut').textContent=d.csr; $('#csr-result').style.display='block';
+  }catch(e){$('#csrErr').style.display='block';$('#csrErr').textContent='❌ '+e.message;}
 }
-function tick(){loadStatus();loadCerts();}
+function dl(kind){
+  const blob=new Blob([CSR[kind]],{type:'application/x-pem-file'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=CSR.filename+(kind==='csr'?'.csr':'.key'); a.click();
+}
+
 async function init(){
-  let issue=false;
-  try{const cfg=await j('/api/config');issue=!!cfg.issue_enabled;}catch(e){issue=false;}
-  $('#mode').textContent = issue ? '🟢 emisión habilitada (token)' : '🔒 sólo lectura';
-  if(issue) $('#card-issue').style.display='';
+  // perfiles y tipos de clave
+  try{const pf=await j('/api/profiles');
+    KEYTYPES=pf.key_types;
+    $('#i-profile').innerHTML=Object.entries(pf.profiles).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
+    fillKty('i'); fillKty('c');
+  }catch(e){}
+  // emisión habilitada?
+  let issueOn=false;
+  try{const cfg=await j('/api/config');issueOn=!!cfg.issue_enabled;}catch(e){}
+  $('#mode').textContent=issueOn?'🟢 emisión habilitada (token)':'🔒 sólo lectura';
+  $('#issue-form').style.display=issueOn?'':'none';
+  $('#issue-disabled').style.display=issueOn?'none':'block';
+  // carga inicial + refresh
+  function tick(){loadStatus();loadCerts();}
   tick();loadCas();loadProvs();
   setInterval(tick,5000);setInterval(loadProvs,15000);
 }

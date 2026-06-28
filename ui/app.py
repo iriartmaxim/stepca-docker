@@ -204,26 +204,72 @@ async def provisioners():
     return out
 
 
+# Perfiles de uso (mapeados a KeyUsage/EKU por la plantilla web-leaf.tpl)
+PROFILES = {
+    "tls-server":   "Servidor TLS (serverAuth)",
+    "tls-client":   "Cliente TLS (clientAuth)",
+    "mtls":         "mTLS (serverAuth + clientAuth)",
+    "code-signing": "Firma de código (codeSigning)",
+    "email":        "S/MIME / Email (emailProtection)",
+}
+KEY_TYPES = {"EC": ["P-256", "P-384", "P-521"], "RSA": ["2048", "3072", "4096"]}
+HOST_RE = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$")
+
+
+@app.get("/api/profiles")
+def profiles():
+    return {"profiles": PROFILES, "key_types": KEY_TYPES}
+
+
 class IssueReq(BaseModel):
     domain: str
+    profile: str = "tls-server"
+    key_type: str = "EC"
+    key_param: str = "P-256"   # curva (EC) o tamaño (RSA)
+    sans: list[str] = []       # SANs adicionales (*.local)
+
+
+def _key_flags(key_type, key_param):
+    if key_type not in KEY_TYPES:
+        raise HTTPException(400, "Tipo de clave inválido")
+    flags = ["--kty", key_type]
+    if key_type == "EC":
+        if key_param not in KEY_TYPES["EC"]:
+            raise HTTPException(400, "Curva inválida")
+        flags += ["--crv", key_param]
+    else:
+        if key_param not in KEY_TYPES["RSA"]:
+            raise HTTPException(400, "Tamaño RSA inválido")
+        flags += ["--size", key_param]
+    return flags
 
 
 @app.post("/api/issue")
 def issue(req: IssueReq, x_auth_token: str = Header(default="")):
-    """Emite un certificado para <domain> vía la API autenticada de step-ca
-    (provisioner JWK 'web'), SIN socket de Docker. Requiere token de operador."""
+    """Emite un certificado vía la API autenticada de step-ca (provisioner JWK
+    'web'), SIN socket. Soporta perfil de uso y tipo de clave. Requiere token."""
     if not issue_enabled():
         raise HTTPException(403, "Emisión deshabilitada (faltan UI_TOKEN o el secreto del provisioner web)")
     if x_auth_token != UI_TOKEN:
         raise HTTPException(401, "Token de operador inválido")
     domain = req.domain.strip().lower()
-    if not DOMAIN_RE.match(domain):  # defensa adicional (igual se usa argv, sin shell)
+    if not DOMAIN_RE.match(domain):
         raise HTTPException(400, "Nombre inválido: se permite sólo un hostname *.local")
+    if req.profile not in PROFILES:
+        raise HTTPException(400, "Perfil inválido")
+    sans = [s.strip().lower() for s in req.sans if s.strip()]
+    for s in sans:
+        if not DOMAIN_RE.match(s):
+            raise HTTPException(400, f"SAN inválido (sólo *.local): {s}")
     with tempfile.TemporaryDirectory() as td:
         crt, key = os.path.join(td, "d.crt"), os.path.join(td, "d.key")
         cmd = ["step", "ca", "certificate", domain, crt, key,
                "--provisioner", "web", "--provisioner-password-file", WEB_PW_FILE,
-               "--ca-url", INT_CA_URL, "--root", ROOT_CRT, "--force"]
+               "--ca-url", INT_CA_URL, "--root", ROOT_CRT, "--force",
+               "--set", f"profile={req.profile}"]
+        cmd += _key_flags(req.key_type, req.key_param)
+        for s in sans:
+            cmd += ["--san", s]
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         ok = p.returncode == 0 and os.path.exists(crt)
         out = (p.stdout or "") + (p.stderr or "")
@@ -232,9 +278,43 @@ def issue(req: IssueReq, x_auth_token: str = Header(default="")):
             ins = subprocess.run(["step", "certificate", "inspect", crt, "--short"],
                                  capture_output=True, text=True)
             inspect = ins.stdout
-            try:  # guardar en el inventario
+            try:
                 os.makedirs(ISSUED_DIR, exist_ok=True)
                 shutil.copy(crt, os.path.join(ISSUED_DIR, f"{domain}.crt"))
             except Exception:
                 pass
         return {"ok": ok, "output": out + (("\n----- inspect -----\n" + inspect) if inspect else "")}
+
+
+class CsrReq(BaseModel):
+    common_name: str
+    sans: list[str] = []
+    key_type: str = "EC"
+    key_param: str = "P-256"
+
+
+@app.post("/api/csr")
+def gen_csr(req: CsrReq):
+    """Genera un CSR + clave privada con las opciones dadas y los devuelve para
+    descargar. No requiere CA (es material local); no toca la PKI."""
+    cn = req.common_name.strip().lower()
+    if not HOST_RE.match(cn):
+        raise HTTPException(400, "Common Name inválido (debe ser un hostname FQDN)")
+    sans = [s.strip().lower() for s in req.sans if s.strip()] or [cn]
+    for s in sans:
+        if not HOST_RE.match(s):
+            raise HTTPException(400, f"SAN inválido: {s}")
+    with tempfile.TemporaryDirectory() as td:
+        csr, key = os.path.join(td, "req.csr"), os.path.join(td, "req.key")
+        cmd = ["step", "certificate", "create", cn, csr, key, "--csr",
+               "--no-password", "--insecure", "--force"]
+        cmd += _key_flags(req.key_type, req.key_param)
+        for s in sans:
+            cmd += ["--san", s]
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        if p.returncode != 0 or not os.path.exists(csr):
+            raise HTTPException(400, "Error generando CSR: " + (p.stderr or p.stdout))
+        return {"ok": True,
+                "csr": open(csr).read(),
+                "key": open(key).read(),
+                "filename": cn.replace("*", "wildcard")}
