@@ -8,8 +8,8 @@ Estado: ⬜ pendiente · 🚧 en curso · ✅ hecho. Cada avance: commit en main
 3. ✅ **Inventario**: detalle en modal (siempre visible) + paginación 10/página.
    inline junto a la fila + scroll a él); **paginar 10 por página**.
 4. ✅ **Quitar Operaciones** por completo (nav + sección + JS + endpoints).
-5. ⬜ **Agregar intermedias**: autodesplegar un step-ca más (+ RA opcional) y que aparezca
-   solo en el tablero Estado.
+5. ✅ (núcleo) **Agregar intermedias**: autodespliegue socket-free (UI encola → watcher del host → aparece en Estado). RA opcional: follow-up.
+
 6. ✅ **Estado**: separar Roots / Intermedias / RAs (incluye intermedias adicionales).
 7. ✅ **CAs**: dos cajas distintas (Roots / Intermedias).
 8. ✅ **Provisioners**: alta type-aware (ACME/JWK/X5C/SCEP/OIDC) + (?) por campo.
@@ -28,3 +28,4 @@ Estado: ⬜ pendiente · 🚧 en curso · ✅ hecho. Cada avance: commit en main
 - #1 ✅ Emitir: tooltips (?), perfiles=templates con autocompletado, validez (not_after).
 - #2 ✅ CSR: templates con autocompletado (mode/clave/CN/desc) + tooltips por campo.
 - #8 ✅ Alta de provisioners type-aware (5 tipos) con campos y tooltips por tipo.
+- #5 ✅ (núcleo) Autodespliegue de intermedia: /api/intermediates (spool) + intermediate-watcher.sh; verificado E2E (int-d apareció en Estado y se registró). RA opcional queda como follow-up.

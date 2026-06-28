@@ -86,7 +86,23 @@
     <!-- ESTADO -->
     <section id="sec-estado" class="active">
       <div class="card"><h2>Roots</h2><div id="status-root" class="grid"></div></div>
-      <div class="card"><h2>Intermedias</h2><div id="status-intermediate" class="grid"></div></div>
+      <div class="card"><h2>Intermedias</h2><div id="status-intermediate" class="grid"></div>
+        <div id="int-add" style="display:none;margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+          <div class="muted" style="font-size:12px;margin-bottom:8px">Autodesplegar una intermedia nueva (un step-ca más). La UI lo <b>encola</b>; un watcher del host la despliega y la registra acá (la UI no monta el socket de Docker).</div>
+          <div class="row">
+            <div style="flex:0"><label>id<span class="tip" title="Identificador corto y único (minúsculas/dígitos, ej.: d, prod, edge). Define el nombre del servicio stepca-int-&lt;id&gt;.">?</span></label><input id="int-id" placeholder="d" style="width:90px"></div>
+            <div><label>Nombre de la CA<span class="tip" title="Nombre legible de la intermedia (Subject CN), ej.: 'Intermediate D CA'.">?</span></label><input id="int-name" placeholder="Intermediate D CA"></div>
+            <div style="flex:0"><label>Puerto host<span class="tip" title="Puerto del host donde se publica esta intermedia (debe estar libre). Default 9002+.">?</span></label><input id="int-port" type="number" value="9003" style="width:110px"></div>
+            <div style="flex:0"><label>RA<span class="tip" title="Desplegar también una Autoridad de Registro (ACME) para esta intermedia. Opcional.">?</span></label><div style="padding-top:8px"><input id="int-ra" type="checkbox"></div></div>
+          </div>
+          <div class="row">
+            <div><label>Token (admin)<span class="tip" title="Token de rol admin (UI_TOKEN).">?</span></label><input id="int-token" type="password" placeholder="UI_TOKEN"></div>
+            <div style="flex:0"><label>&nbsp;</label><button class="primary" onclick="addIntermediate()">Desplegar</button></div>
+          </div>
+          <div id="int-msg" class="muted" style="font-size:12px"></div>
+          <div id="int-list" style="margin-top:8px"></div>
+        </div>
+      </div>
       <div class="card"><h2>Autoridades de Registro (RA)</h2><div id="status-ra" class="grid"></div></div>
       <div class="card"><h2>Réplicas · balanceador (HAProxy)</h2>
         <table id="hap"><thead><tr><th>Backend</th><th>Servidor</th><th>Estado</th></tr></thead><tbody></tbody></table>
@@ -348,6 +364,25 @@ async function loadCompliance(){
   }catch(e){ tb.innerHTML=`<tr><td colspan="4" class="muted">❌ ${e.message}</td></tr>`; }
 }
 
+async function addIntermediate(){
+  const m=$('#int-msg'); m.textContent='Encolando…';
+  try{
+    const r=await fetch('/api/intermediates',{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':$('#int-token').value},
+      body:JSON.stringify({id:$('#int-id').value.trim(),name:$('#int-name').value.trim(),port:parseInt($('#int-port').value||'9002'),with_ra:$('#int-ra').checked})});
+    if(!r.ok){ m.textContent='❌ '+(await r.text()); return; }
+    const d=await r.json(); m.textContent='✅ '+d.note; loadIntermediates();
+  }catch(e){ m.textContent='❌ '+e.message; }
+}
+const INT_ST={pendiente:'warning',desplegando:'warning',desplegada:'ok',error:'critical'};
+async function loadIntermediates(){
+  try{
+    const d=await j('/api/intermediates');
+    $('#int-list').innerHTML = d.items.length ? '<table><tr><th>id</th><th>Nombre</th><th>Estado</th><th>Detalle</th></tr>'+
+      d.items.map(it=>`<tr><td><code>${it.id}</code></td><td>${it.name}</td>
+        <td><span class="pill ${INT_ST[it.status]||''}">${it.status}</span></td>
+        <td class="muted" style="font-size:11px">${it.detail||''}</td></tr>`).join('')+'</table>' : '';
+  }catch(e){}
+}
 async function loadStatus(){
   const d = await j('/api/status');
   const card=c=>`<div class="ca"><div class="name"><span class="dot ${c.healthy?'ok':'bad'}"></span>${c.label}</div>
@@ -756,11 +791,13 @@ async function init(){
   $('#issue-form').style.display=issueOn?'':'none';
   $('#issue-disabled').style.display=issueOn?'none':'block';
   $('#prov-manage').style.display=issueOn?'':'none';
+  $('#int-add').style.display=issueOn?'':'none';
   $('#p-challs').innerHTML=['http-01','dns-01','tls-alpn-01','device-attest-01']
     .map(c=>`<label style="display:flex;gap:4px;align-items:center;margin:0"><input type="checkbox" value="${c}" style="width:auto"> ${c}</label>`).join('');
   // carga inicial + refresh
   function tick(){loadStatus();loadCerts();loadHaproxy();loadPg();}
-  tick();loadCas();loadProvs();loadSettings();loadCrl();
+  tick();loadCas();loadProvs();loadSettings();loadCrl();loadIntermediates();
+  setInterval(loadIntermediates,8000);
   setInterval(tick,5000);setInterval(loadProvs,15000);setInterval(loadSettings,30000);
 }
 init();

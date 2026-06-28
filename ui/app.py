@@ -415,6 +415,66 @@ def key_custody():
             "recommend": "Producción: claves de CA en HSM/PKCS#11 y Root offline (ver docs/hardening.md §2-3)."}
 
 
+# ── Autodespliegue de intermedias (la UI encola; un watcher del host ejecuta) ──
+SPOOL_DIR = "/spool"
+INT_ID_RE = re.compile(r"^[a-z0-9]{1,12}$")
+
+
+class IntReq(BaseModel):
+    id: str
+    name: str
+    port: int = 9002
+    with_ra: bool = False
+
+
+@app.post("/api/intermediates")
+def request_intermediate(req: IntReq, x_auth_token: str = Header(default="")):
+    """Encola el despliegue de una intermedia (la ejecuta el watcher del host, sin socket)."""
+    _require_admin(x_auth_token)
+    import json
+    iid = req.id.strip().lower()
+    if not INT_ID_RE.match(iid):
+        raise HTTPException(400, "id inválido (minúsculas/dígitos, 1-12)")
+    if iid == "default" or iid in ISSUERS:
+        raise HTTPException(400, "Ese id ya existe como emisora")
+    if not (1 <= len(req.name.strip()) <= 64):
+        raise HTTPException(400, "Nombre inválido")
+    if not (1024 <= req.port <= 65535):
+        raise HTTPException(400, "Puerto inválido (1024-65535)")
+    os.makedirs(SPOOL_DIR, exist_ok=True)
+    for suf in (".request.json", ".working.json", ".done.json"):
+        if os.path.exists(os.path.join(SPOOL_DIR, iid + suf)):
+            raise HTTPException(400, "Ya hay un pedido/despliegue para ese id")
+    with open(os.path.join(SPOOL_DIR, iid + ".request.json"), "w") as f:
+        json.dump({"id": iid, "name": req.name.strip(), "port": req.port,
+                   "with_ra": req.with_ra,
+                   "ts": dt.datetime.now(dt.timezone.utc).isoformat()}, f)
+    return {"ok": True, "queued": iid,
+            "note": "Encolada. El watcher del host (scripts/intermediate-watcher.sh) la desplegará."}
+
+
+@app.get("/api/intermediates")
+def list_intermediates():
+    """Lista los pedidos de intermedia y su estado (pendiente/desplegando/desplegada/error)."""
+    import json
+    states = {".request.json": "pendiente", ".working.json": "desplegando",
+              ".done.json": "desplegada", ".error.json": "error"}
+    items = []
+    if os.path.isdir(SPOOL_DIR):
+        for fn in sorted(os.listdir(SPOOL_DIR)):
+            for suf, st in states.items():
+                if fn.endswith(suf):
+                    try:
+                        with open(os.path.join(SPOOL_DIR, fn)) as f:
+                            d = json.load(f)
+                    except Exception:
+                        d = {}
+                    items.append({"id": d.get("id", fn.split(".")[0]),
+                                  "name": d.get("name", ""), "status": st,
+                                  "detail": str(d.get("detail", ""))[:140]})
+    return {"items": items}
+
+
 CP_CPS_FILE = "/docs/CP-CPS.md"
 
 
