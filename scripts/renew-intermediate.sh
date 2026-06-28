@@ -34,6 +34,8 @@ docker exec stepca-root step certificate sign \
   --password-file /run/secrets/ca_password \
   > "${INT_CRT}"
 
-echo "♻️  Recargando la intermedia…"
-docker exec stepca-intermediate kill -1 1 || docker compose restart stepca-intermediate
+echo "♻️  Recargando las réplicas de la intermedia…"
+# Post-HA: la intermedia corre como réplicas stepca-int-1 / stepca-int-2 (mismo cert
+# por volumen compartido). Se reinician ambas para que tomen el cert renovado.
+docker compose restart stepca-int-1 stepca-int-2
 echo "✅ Intermedia renovada."

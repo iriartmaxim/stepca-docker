@@ -63,3 +63,4 @@ socket de Docker (manteniendo UI-sin-socket).
 - #5 ✅ Edición de umbrales UI en runtime (/api/settings/ui).
 - ops ✅ Exportación del inventario a CSV (/api/certificates.csv).
 - fix ✅ Healthcheck de la UI + demo dns-01 (compose.acme-demo + script) tras refactor HA.
+- fix ✅ renew-intermediate.sh recargaba el contenedor viejo (ahora int-1/int-2).
