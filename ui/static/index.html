@@ -73,6 +73,7 @@
     <button data-sec="emitir"><span class="ico">➕</span> Emitir</button>
     <button data-sec="csr"><span class="ico">📝</span> Generar CSR</button>
     <button data-sec="inv"><span class="ico">🗂️</span> Inventario</button>
+    <button data-sec="config"><span class="ico">⚙️</span> Configuración</button>
   </nav>
 
   <main>
@@ -189,6 +190,14 @@
         <div id="certempty" class="muted" style="display:none">Sin certificados en el inventario.</div>
       </div>
     </section>
+
+    <!-- CONFIGURACIÓN -->
+    <section id="sec-config">
+      <div class="card"><h2>UI · emisión</h2><div id="cfg-ui"></div></div>
+      <div class="card"><h2>Intermediate CA · claims y provisioners</h2><div id="cfg-int"></div></div>
+      <div class="card"><h2>Infraestructura</h2><div id="cfg-infra"></div></div>
+      <div class="muted" style="font-size:12px">Vista de sólo lectura. La edición aplicable se agrega en próximas iteraciones (ver docs/ROADMAP-ui.md).</div>
+    </section>
   </main>
 </div>
 
@@ -209,6 +218,23 @@ async function loadStatus(){
   $('#status').innerHTML = d.map(c=>`<div class="ca"><div class="name"><span class="dot ${c.healthy?'ok':'bad'}"></span>${c.label}</div>
     <div class="meta">${c.name}<br>puerto host :${c.host_port} · ${c.healthy?'healthy':'caído'}</div></div>`).join('');
   $('#overall').className='dot '+(d.every(c=>c.healthy)?'ok':(d.some(c=>c.healthy)?'warn':'bad'));
+}
+function kv(o){ return Object.entries(o).map(([k,v])=>`<tr><td class="muted">${k}</td><td>${v==null?'—':(typeof v==='object'?JSON.stringify(v):v)}</td></tr>`).join(''); }
+async function loadSettings(){
+  try{
+    const d=await j('/api/settings'); const u=d.ui, c=d.intermediate;
+    $('#cfg-ui').innerHTML=`<table>${kv({
+      'Emisión habilitada':u.issue_enabled,'Umbral por vencer (h)':u.cert_warn_h,'Umbral crítico (h)':u.cert_crit_h,
+      'CA emisora (default)':u.int_ca_url,'CAs emisoras':u.issuers.map(i=>i.label).join(', ')})}</table>`;
+    if(c.error){ $('#cfg-int').innerHTML='<span class="muted">'+c.error+'</span>'; }
+    else{
+      $('#cfg-int').innerHTML=`<table>${kv({'dnsNames':c.dns_names,'DB':c.db_type,'Admin API':c.enable_admin,
+        'minTLSCertDuration':(c.claims||{}).minTLSCertDuration,'maxTLSCertDuration':(c.claims||{}).maxTLSCertDuration,
+        'defaultTLSCertDuration':(c.claims||{}).defaultTLSCertDuration})}</table>`+
+        '<div style="margin-top:8px">'+(c.provisioners||[]).map(p=>`<span class="badge">${p.name} · ${p.type}${p.policy&&p.policy.dns?' · '+p.policy.dns.join(','):''}</span>`).join('')+'</div>';
+    }
+    $('#cfg-infra').innerHTML=`<table>${kv({'PostgreSQL hosts':u.pg_hosts.join(', '),'PG user':u.pg_user,'HAProxy stats':u.haproxy_stats})}</table>`;
+  }catch(e){ $('#cfg-ui').innerHTML='<span class="muted">'+e.message+'</span>'; }
 }
 async function loadHaproxy(){
   try{
@@ -377,8 +403,8 @@ async function init(){
     .map(c=>`<label style="display:flex;gap:4px;align-items:center;margin:0"><input type="checkbox" value="${c}" style="width:auto"> ${c}</label>`).join('');
   // carga inicial + refresh
   function tick(){loadStatus();loadCerts();loadHaproxy();loadPg();}
-  tick();loadCas();loadProvs();
-  setInterval(tick,5000);setInterval(loadProvs,15000);
+  tick();loadCas();loadProvs();loadSettings();
+  setInterval(tick,5000);setInterval(loadProvs,15000);setInterval(loadSettings,30000);
 }
 init();
 </script>

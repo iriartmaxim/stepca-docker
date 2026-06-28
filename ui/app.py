@@ -208,6 +208,42 @@ PG_PASSWORD = os.environ.get("PG_PASSWORD", "")
 PG_HOSTS = [h for h in os.environ.get("PG_HOSTS", "pg-primary,pg-standby").split(",") if h]
 
 
+INT_CFG_FILE = os.environ.get("INT_CFG_FILE", "/cfg/intermediate/ca.json")
+
+
+@app.get("/api/settings")
+def settings():
+    """Vista de la configuración vigente (sólo lectura)."""
+    import json
+    ui = {
+        "issue_enabled": issue_enabled(),
+        "cert_warn_h": WARN_H, "cert_crit_h": CRIT_H,
+        "int_ca_url": INT_CA_URL, "haproxy_stats": HAPROXY_STATS,
+        "pg_hosts": PG_HOSTS, "pg_user": PG_USER,
+        "issuers": [{"id": k, "label": v["label"], "ca_url": v["ca_url"]} for k, v in ISSUERS.items()],
+    }
+    ca = {}
+    try:
+        with open(INT_CFG_FILE) as f:
+            d = json.load(f)
+        auth = d.get("authority", {})
+        ca = {
+            "dns_names": d.get("dnsNames"),
+            "db_type": (d.get("db") or {}).get("type"),
+            "enable_admin": auth.get("enableAdmin"),
+            "claims": auth.get("claims"),
+            "provisioners": [
+                {"name": p.get("name"), "type": p.get("type"),
+                 "policy": (p.get("policy") or {}).get("x509", {}).get("allow"),
+                 "challenges": p.get("challenges")}
+                for p in auth.get("provisioners", [])
+            ],
+        }
+    except Exception as e:
+        ca = {"error": str(e)[:120]}
+    return {"ui": ui, "intermediate": ca}
+
+
 @app.get("/api/haproxy")
 async def haproxy():
     """Estado de los backends del balanceador (HAProxy stats CSV)."""

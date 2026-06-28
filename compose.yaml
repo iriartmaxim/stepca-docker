@@ -258,6 +258,7 @@ services:
     volumes:
       - ./persistent/root/certs:/certs/root:ro
       - ./persistent/intermediate/certs:/certs/intermediate:ro
+      - ./persistent/intermediate/config:/cfg/intermediate:ro
       - ./persistent/issued:/certs/issued
       # Credencial del provisioner 'web' (emisión segura vía API, sin socket)
       - ./persistent/ui/web_provisioner_password:/run/secrets/web_provisioner_password:ro

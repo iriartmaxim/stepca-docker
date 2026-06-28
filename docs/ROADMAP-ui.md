@@ -33,10 +33,10 @@ socket de Docker (manteniendo UI-sin-socket).
 - ✅ Datos en vivo: HAProxy stats (CSV, /api/haproxy), replicación de Postgres
   (/api/pg-status con psycopg2), links a Grafana/Prometheus/Targets.
 
-### 5. Sección Configuración en la UI
-- ⬜ Lectura de toda la config (.env, claims/duraciones, políticas, Postgres/HAProxy,
-  umbrales UI).
-- ⬜ Edición aplicable donde sea seguro.
+### 5. Sección Configuración en la UI  🚧
+- ✅ Lectura: sección Configuración + /api/settings (UI/emisión, claims y provisioners
+  de la intermedia, infra Postgres/HAProxy). La UI monta la config de la intermedia ro.
+- ⬜ Edición aplicable donde sea seguro (umbrales UI, claims, políticas).
 
 ## Mejoras (post-5)
 - ⬜ Performance: pooling/índices Postgres, tuning step-ca, caché UI, recarga de
@@ -49,3 +49,5 @@ socket de Docker (manteniendo UI-sin-socket).
 - #4 ✅ Estado seccionado (CAs/HAProxy/PostgreSQL/Observabilidad) con datos en vivo.
 - #2 ✅ (núcleo) CSR sub-CA en la UI + import-intermediate.sh (firma ADCS) + doc.
   Probado con CA externa simulada. Próximo: #5 (Configuración) o #1 (operaciones).
+
+- #5 🚧 Sección Configuración (lectura): /api/settings + sección en la UI.
