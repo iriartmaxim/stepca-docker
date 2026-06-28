@@ -15,7 +15,7 @@ Leyenda: ✅ tiene · 🟡 parcial · ⬜ falta · ★ priorizado para implement
 | 1 | Inventario / lifecycle de certs | EJBCA, Keyfactor, Venafi | ✅ Inventario + emisión/revocación/inspección | — |
 | 2 | **Búsqueda y filtrado** de certs | todos | ⬜ | ★ B1 (este tick) |
 | 3 | **Monitoreo de vencimientos** (buckets, % por estado) | todos | 🟡 (pills) | ★ B1 |
-| 4 | **Alertas/notificaciones** de expiración (webhook/email) | Keyfactor, Venafi | ⬜ | ★ B2 |
+| 4 | **Alertas/notificaciones** de expiración (webhook) | Keyfactor, Venafi | ✅ webhook + notify | 🟡 scheduling |
 | 5 | Reporting/compliance export | todos | ✅ CSV | 🟡 ampliar |
 | 6 | **RBAC / roles** | EJBCA, Keyfactor, Venafi | ✅ viewer/operator/admin | — |
 | 7 | Motor de políticas (allow/deny, name constraints) | Venafi, EJBCA | 🟡 policy.x509 | ★ A3 (editor en UI) |

@@ -254,6 +254,11 @@
             <div><label>Token</label><input id="cf-token" type="password" placeholder="UI_TOKEN"></div>
             <div style="flex:0"><label>&nbsp;</label><button class="primary" onclick="saveUiCfg()">Guardar</button></div>
           </div>
+          <div class="row" style="margin-top:8px;align-items:flex-end">
+            <div><label>Webhook de alertas (http/https)</label><input id="cf-webhook" placeholder="https://hooks…/…"></div>
+            <div style="flex:0"><label>&nbsp;</label><button class="ghost" onclick="testWebhook()">Probar</button></div>
+            <div style="flex:0"><label>&nbsp;</label><button class="ghost" onclick="notifyExpiring()">Notificar vencimientos</button></div>
+          </div>
           <span id="cf-msg" class="muted" style="font-size:12px"></span>
         </div>
       </div>
@@ -358,6 +363,7 @@ async function loadSettings(){
     if(ADMIN){ $('#cfg-edit').style.display='block';
       if(!$('#cf-warn').value) $('#cf-warn').value=u.cert_warn_h;
       if(!$('#cf-crit').value) $('#cf-crit').value=u.cert_crit_h;
+      if(!$('#cf-webhook').value && u.webhook_url) $('#cf-webhook').value=u.webhook_url;
       $('#claims-card').style.display='block'; const cl=c.claims||{};
       if(cl.minTLSCertDuration&&$('#cl-min').value==='5m') $('#cl-min').value=cl.minTLSCertDuration;
       if(cl.defaultTLSCertDuration&&$('#cl-def').value==='24h') $('#cl-def').value=cl.defaultTLSCertDuration;
@@ -412,9 +418,26 @@ async function saveUiCfg(){
   const m=$('#cf-msg'); m.textContent='Guardando…';
   try{
     const r=await fetch('/api/settings/ui',{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':$('#cf-token').value},
-      body:JSON.stringify({cert_warn_h:parseFloat($('#cf-warn').value),cert_crit_h:parseFloat($('#cf-crit').value)})});
+      body:JSON.stringify({cert_warn_h:parseFloat($('#cf-warn').value),cert_crit_h:parseFloat($('#cf-crit').value),webhook_url:$('#cf-webhook').value})});
     if(!r.ok){ m.textContent='❌ '+(await r.text()); return; }
     m.textContent='✅ Guardado'; loadCerts(); loadSettings();
+  }catch(e){ m.textContent='❌ '+e.message; }
+}
+async function testWebhook(){
+  const m=$('#cf-msg'); m.textContent='Enviando prueba…';
+  try{
+    const r=await fetch('/api/webhook-test',{method:'POST',headers:{'X-Auth-Token':$('#cf-token').value}});
+    if(!r.ok){ m.textContent='❌ '+(await r.text()); return; }
+    const d=await r.json(); m.textContent=(d.ok?'✅':'⚠️')+' Webhook respondió HTTP '+d.status;
+  }catch(e){ m.textContent='❌ '+e.message; }
+}
+async function notifyExpiring(){
+  const m=$('#cf-msg'); m.textContent='Notificando…';
+  const tok=$('#cf-token').value||$('#i-token').value;
+  try{
+    const r=await fetch('/api/notify-expiring',{method:'POST',headers:{'X-Auth-Token':tok}});
+    if(!r.ok){ m.textContent='❌ '+(await r.text()); return; }
+    const d=await r.json(); m.textContent=(d.ok?'✅':'⚠️')+` Notificados ${d.notified} cert(s) por vencer · webhook HTTP ${d.status}`;
   }catch(e){ m.textContent='❌ '+e.message; }
 }
 async function loadHaproxy(){

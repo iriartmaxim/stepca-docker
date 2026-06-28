@@ -63,3 +63,4 @@ notificaciones, reporting/compliance, API keys, multi-tenant, métricas.)
 - compliance ✅ Dashboard de Cumplimiento NIST en vivo (/api/compliance, sección UI).
 - A3 ✅ (doc) CP/CPS RFC 3647 (docs/CP-CPS.md) visible en la UI (/api/cp-cps).
 - ops ✅ Smoke/health EJECUTABLE desde la UI (/api/operations/run/smoke, operator+).
+- B2 ✅ Alertas de vencimiento por webhook (/api/webhook-test, /api/notify-expiring).

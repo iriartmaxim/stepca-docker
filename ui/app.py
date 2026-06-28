@@ -50,17 +50,27 @@ def issue_enabled():
 UI_CFG_FILE = os.path.join(ISSUED_DIR, "ui-config.json")
 
 
-def _thresholds():
-    warn, crit = WARN_H, CRIT_H
+def _ui_cfg():
     try:
         import json
         with open(UI_CFG_FILE) as f:
-            d = json.load(f)
-        warn = float(d.get("cert_warn_h", warn))
-        crit = float(d.get("cert_crit_h", crit))
+            return json.load(f)
     except Exception:
-        pass
-    return warn, crit
+        return {}
+
+
+def _save_ui_cfg(d):
+    import json
+    with open(UI_CFG_FILE, "w") as f:
+        json.dump(d, f)
+
+
+def _thresholds():
+    d = _ui_cfg()
+    try:
+        return float(d.get("cert_warn_h", WARN_H)), float(d.get("cert_crit_h", CRIT_H))
+    except Exception:
+        return WARN_H, CRIT_H
 
 
 # Servicios de la PKI (etiqueta, URL interna de health)
@@ -369,6 +379,7 @@ def settings():
     ui = {
         "issue_enabled": issue_enabled(),
         "cert_warn_h": warn_h, "cert_crit_h": crit_h,
+        "webhook_url": _ui_cfg().get("webhook_url", ""),
         "int_ca_url": INT_CA_URL, "haproxy_stats": HAPROXY_STATS,
         "pg_hosts": PG_HOSTS, "pg_user": PG_USER,
         "issuers": [{"id": k, "label": v["label"], "ca_url": v["ca_url"]} for k, v in ISSUERS.items()],
@@ -511,21 +522,63 @@ def compliance():
 class UiCfgReq(BaseModel):
     cert_warn_h: float
     cert_crit_h: float
+    webhook_url: str | None = None
 
 
 @app.post("/api/settings/ui")
 def set_ui_settings(req: UiCfgReq, x_auth_token: str = Header(default="")):
-    """Edita los umbrales de la UI (por vencer / crítico) en runtime."""
+    """Edita los umbrales de la UI y la URL de webhook de alertas en runtime."""
     _require_admin(x_auth_token)
     if not (0 < req.cert_crit_h <= req.cert_warn_h <= 24*30):
         raise HTTPException(400, "Umbrales inválidos (0 < crítico ≤ por-vencer ≤ 720h)")
-    import json
+    wh = (req.webhook_url or "").strip()
+    if wh and not wh.startswith(("http://", "https://")):
+        raise HTTPException(400, "Webhook inválido (debe ser http(s)://…)")
+    cfg = _ui_cfg()
+    cfg.update({"cert_warn_h": req.cert_warn_h, "cert_crit_h": req.cert_crit_h, "webhook_url": wh})
     try:
-        with open(UI_CFG_FILE, "w") as f:
-            json.dump({"cert_warn_h": req.cert_warn_h, "cert_crit_h": req.cert_crit_h}, f)
+        _save_ui_cfg(cfg)
     except Exception as e:
         raise HTTPException(500, "No se pudo guardar: " + str(e)[:100])
-    return {"ok": True, "cert_warn_h": req.cert_warn_h, "cert_crit_h": req.cert_crit_h}
+    return {"ok": True, "cert_warn_h": req.cert_warn_h, "cert_crit_h": req.cert_crit_h,
+            "webhook_url": wh}
+
+
+def _post_webhook(payload):
+    url = (_ui_cfg().get("webhook_url") or "").strip()
+    if not url:
+        raise HTTPException(400, "No hay webhook configurado (Configuración → UI · emisión)")
+    try:
+        with httpx.Client(timeout=6) as c:
+            r = c.post(url, json=payload)
+        return {"ok": r.status_code < 400, "status": r.status_code}
+    except Exception as e:
+        raise HTTPException(502, "Error enviando al webhook: " + str(e)[:100])
+
+
+@app.post("/api/webhook-test")
+def webhook_test(x_auth_token: str = Header(default="")):
+    """Envía un payload de prueba al webhook configurado (admin)."""
+    _require_admin(x_auth_token)
+    res = _post_webhook({"event": "test", "source": "stepca-ui",
+                         "ts": dt.datetime.now(dt.timezone.utc).isoformat()})
+    return {"ok": res["ok"], "status": res["status"]}
+
+
+@app.post("/api/notify-expiring")
+def notify_expiring(x_auth_token: str = Header(default="")):
+    """Reúne los certs por vencer/críticos/vencidos y los envía al webhook (operator+)."""
+    _require_role(x_auth_token, "operator")
+    certs = certificates()["certificates"]
+    expiring = [{"common_name": c["common_name"], "status": c["status"],
+                 "expires_in": c["expires_in"], "not_after": c["not_after"],
+                 "serial": c["serial"], "issuer": c["issuer"]}
+                for c in certs if c["status"] in ("warning", "critical", "expired")]
+    payload = {"event": "expiring-certificates", "source": "stepca-ui",
+               "ts": dt.datetime.now(dt.timezone.utc).isoformat(),
+               "count": len(expiring), "certificates": expiring}
+    res = _post_webhook(payload)
+    return {"ok": res["ok"], "status": res["status"], "notified": len(expiring)}
 
 
 @app.get("/api/haproxy")
