@@ -660,6 +660,21 @@ def audit(limit: int = 150):
             detail = "método=" + method + (f" · motivo={d['Reason']}" if d.get("Reason") else "")
             events.append({"ts": d.get("RevokedAt"), "type": "revoked",
                            "subject": "", "serial": serial, "detail": detail})
+        # Altas/bajas de provisioner (acciones admin — NIST AU)
+        ptype = {1: "JWK", 2: "OIDC", 3: "AWS", 4: "GCP", 5: "Azure", 6: "ACME",
+                 7: "X5C", 8: "K8sSA", 9: "SSHPOP", 10: "SCEP", 11: "Nebula"}
+        cur.execute("SELECT convert_from(nvalue,'UTF8') FROM provisioners")
+        for (row,) in cur.fetchall():
+            d = _json.loads(row)
+            nm, tp = d.get("name", ""), ptype.get(d.get("type"), str(d.get("type")))
+            ca = d.get("createdAt") or ""
+            if ca and not ca.startswith("0001"):
+                events.append({"ts": ca, "type": "prov-add", "subject": nm,
+                               "serial": "", "detail": f"provisioner {tp} creado"})
+            da = d.get("deletedAt") or ""
+            if da and not da.startswith("0001"):
+                events.append({"ts": da, "type": "prov-remove", "subject": nm,
+                               "serial": "", "detail": f"provisioner {tp} eliminado"})
         conn.close()
     except Exception as e:
         events.append({"ts": None, "type": "warn", "subject": "",

@@ -522,7 +522,8 @@ async function revokeCert(file){
     const d=await r.json(); alert('✅ Revocado (serial '+d.serial+')'); loadCerts();
   }catch(e){alert('❌ '+e.message);}
 }
-const EVLABEL={issued:['emitido','var(--ok)'],revoked:['revocado','var(--bad)'],warn:['aviso','var(--warn)']};
+const EVLABEL={issued:['emitido','var(--ok)'],revoked:['revocado','var(--bad)'],warn:['aviso','var(--warn)'],
+  'prov-add':['prov +','var(--accent)'],'prov-remove':['prov −','var(--warn)']};
 async function loadAudit(){
   const tb=$('#audit-tbl tbody');
   try{
