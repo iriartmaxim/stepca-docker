@@ -9,7 +9,7 @@ INTERMEDIATE_PORT ?= 9001
 RA_PORT ?= 9100
 UI_PORT ?= 8088
 
-.PHONY: help secrets env up down restart reset status logs test config pull backup restore renew ui-full stats backup-pg
+.PHONY: help secrets env up down restart reset status logs test config pull backup restore renew ui-full stats backup-pg pg-failover pg-status
 
 help: ## Muestra esta ayuda
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -60,9 +60,16 @@ backup: ## Backup consistente de secrets + persistent (backups/)
 
 backup-pg: ## Dump de las bases PostgreSQL a backups/
 	@mkdir -p backups
-	@$(COMPOSE) exec -T postgres pg_dump -U $${PG_USER:-stepca} stepca_int > backups/stepca_int-$$(date +%Y%m%d-%H%M%S).sql
-	@$(COMPOSE) exec -T postgres pg_dump -U $${PG_USER:-stepca} stepca_ra  > backups/stepca_ra-$$(date +%Y%m%d-%H%M%S).sql
+	@$(COMPOSE) exec -T pg-primary pg_dump -U $${PG_USER:-stepca} stepca_int > backups/stepca_int-$$(date +%Y%m%d-%H%M%S).sql
+	@$(COMPOSE) exec -T pg-primary pg_dump -U $${PG_USER:-stepca} stepca_ra  > backups/stepca_ra-$$(date +%Y%m%d-%H%M%S).sql
 	@echo "✅ Dumps en backups/"
+
+pg-failover: ## Promueve el standby a primario (failover de PostgreSQL)
+	@bash scripts/pg-failover.sh
+
+pg-status: ## Estado de la replicación PostgreSQL
+	@echo "== primario: clientes de replicación =="; $(COMPOSE) exec -T pg-primary psql -U $${PG_USER:-stepca} -c "SELECT client_addr,state,sync_state FROM pg_stat_replication;" 2>/dev/null || true
+	@echo "== standby: ¿en recovery? =="; $(COMPOSE) exec -T pg-standby psql -U $${PG_USER:-stepca} -tAc "SELECT pg_is_in_recovery();" 2>/dev/null || true
 
 restore: ## Restaura un backup: make restore FILE=backups/xxx.tar.gz
 	@bash scripts/restore.sh "$(FILE)"

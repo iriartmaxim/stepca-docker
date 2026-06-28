@@ -15,6 +15,7 @@ envval() { grep -E "^$1=" .env 2>/dev/null | head -1 | cut -d= -f2- \
 IMAGE="$(envval STEPCA_IMAGE)"; IMAGE="${IMAGE:-smallstep/step-ca:0.28.3}"
 PG_USER="$(envval PG_USER)";    PG_USER="${PG_USER:-stepca}"
 PG_PASSWORD="$(envval PG_PASSWORD)"; PG_PASSWORD="${PG_PASSWORD:-stepca-change-me}"
+REPLICATION_PASSWORD="$(envval REPLICATION_PASSWORD)"; REPLICATION_PASSWORD="${REPLICATION_PASSWORD:-repl-change-me}"
 INT_PORT="$(envval INTERMEDIATE_PORT)"; INT_PORT="${INT_PORT:-9001}"
 RA_PORT="$(envval RA_PORT)"; RA_PORT="${RA_PORT:-9100}"
 COMPOSE="docker compose"
@@ -23,8 +24,11 @@ INT_CFG="persistent/intermediate/config/ca.json"
 RA_DIR="persistent/ra/ra-one"
 RA_KEY="${RA_DIR}/secrets/ra.key.pem"
 RA_PUB="${RA_DIR}/secrets/ra_jwk.pub.json"
-DSN_INT="postgresql://${PG_USER}:${PG_PASSWORD}@postgres:5432/stepca_int?sslmode=disable"
-DSN_RA="postgresql://${PG_USER}:${PG_PASSWORD}@postgres:5432/stepca_ra?sslmode=disable"
+# DSN multi-host: pgx usa el nodo read-write (primario) y reconecta al nuevo
+# primario tras un failover (target_session_attrs=read-write).
+PG_HOSTS="pg-primary:5432,pg-standby:5432"
+DSN_INT="postgresql://${PG_USER}:${PG_PASSWORD}@${PG_HOSTS}/stepca_int?target_session_attrs=read-write&sslmode=disable"
+DSN_RA="postgresql://${PG_USER}:${PG_PASSWORD}@${PG_HOSTS}/stepca_ra?target_session_attrs=read-write&sslmode=disable"
 
 wait_health() { # url, intentos
   for i in $(seq 1 "${2:-40}"); do
@@ -77,14 +81,15 @@ cat > "${INT_CFG}" <<EOF
 }
 EOF
 
-echo "▶ [4/8] PostgreSQL…"
-${COMPOSE} up -d postgres
-echo "  ⏳ esperando a PostgreSQL…"
-for i in $(seq 1 30); do
-  docker exec stepca-postgres pg_isready -U "${PG_USER}" -d stepca_int >/dev/null 2>&1 && break
-  sleep 2; [[ $i -eq 30 ]] && { echo "❌ PostgreSQL no respondió"; exit 1; }
+echo "▶ [4/8] PostgreSQL (primario + standby)…"
+${COMPOSE} up -d pg-primary
+echo "  ⏳ esperando al primario…"
+for i in $(seq 1 40); do
+  docker exec pg-primary pg_isready -U "${PG_USER}" -d stepca_int >/dev/null 2>&1 && break
+  sleep 2; [[ $i -eq 40 ]] && { echo "❌ PostgreSQL primario no respondió"; exit 1; }
 done
-echo "  ✔ PostgreSQL listo"
+echo "  ✔ primario listo; levantando standby (replicación)…"
+${COMPOSE} up -d pg-standby
 
 echo "▶ [5/8] Root CA…"
 ${COMPOSE} up -d stepca-root

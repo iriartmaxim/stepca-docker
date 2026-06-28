@@ -13,15 +13,17 @@
 x-stepca-image: &stepca-image ${STEPCA_IMAGE:-smallstep/step-ca:0.28.3}
 
 services:
-  # ── Base de datos compartida ────────────────────────────────────────────────
-  postgres:
+  # ── PostgreSQL · PRIMARIO ───────────────────────────────────────────────────
+  pg-primary:
     image: postgres:16-alpine
-    container_name: stepca-postgres
+    container_name: pg-primary
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${PG_USER:-stepca}
       POSTGRES_PASSWORD: ${PG_PASSWORD:-stepca-change-me}
       POSTGRES_DB: stepca
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+      REPLICATION_PASSWORD: ${REPLICATION_PASSWORD:-repl-change-me}
     command:
       - "postgres"
       - "-c"
@@ -29,15 +31,46 @@ services:
       - "-c"
       - "shared_buffers=256MB"
       - "-c"
-      - "effective_cache_size=768MB"
+      - "wal_level=replica"
+      - "-c"
+      - "max_wal_senders=10"
+      - "-c"
+      - "max_replication_slots=10"
+      - "-c"
+      - "hot_standby=on"
     volumes:
-      - pg-data:/var/lib/postgresql/data
-      - ./infra/postgres/init-dbs.sh:/docker-entrypoint-initdb.d/init-dbs.sh:ro
+      - pg-primary-data:/var/lib/postgresql/data
+      - ./infra/postgres/primary-init.sh:/docker-entrypoint-initdb.d/primary-init.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d stepca_int && pg_isready -U $${POSTGRES_USER} -d stepca_ra"]
       interval: 10s
       timeout: 5s
-      retries: 12
+      retries: 15
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 1024M }
+
+  # ── PostgreSQL · STANDBY (replicación en streaming) ─────────────────────────
+  pg-standby:
+    image: postgres:16-alpine
+    container_name: pg-standby
+    restart: unless-stopped
+    depends_on:
+      pg-primary: { condition: service_healthy }
+    environment:
+      POSTGRES_USER: ${PG_USER:-stepca}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-stepca-change-me}
+      REPLICATION_PASSWORD: ${REPLICATION_PASSWORD:-repl-change-me}
+      PGDATA: /var/lib/postgresql/data
+    entrypoint: ["/bin/bash", "/usr/local/bin/standby-entry.sh"]
+    volumes:
+      - pg-standby-data:/var/lib/postgresql/data
+      - ./infra/postgres/standby-entry.sh:/usr/local/bin/standby-entry.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
     deploy:
       resources:
         limits: { cpus: "1.0", memory: 1024M }
@@ -91,7 +124,7 @@ services:
     container_name: stepca-int-1
     restart: unless-stopped
     depends_on:
-      postgres: { condition: service_healthy }
+      pg-primary: { condition: service_healthy }
       stepca-root: { condition: service_healthy }
     environment:
       ROOT_CA_URL: https://stepca-root:9000/health
@@ -153,7 +186,7 @@ services:
     container_name: stepca-ra-1
     restart: unless-stopped
     depends_on:
-      postgres: { condition: service_healthy }
+      pg-primary: { condition: service_healthy }
       haproxy: { condition: service_started }
     volumes:
       - ra1-config:/home/step/config
@@ -228,7 +261,8 @@ services:
         limits: { cpus: "0.50", memory: 256M }
 
 volumes:
-  pg-data:
+  pg-primary-data:
+  pg-standby-data:
   prometheus-data:
   grafana-data:
   config-volume:
