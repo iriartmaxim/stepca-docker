@@ -149,10 +149,19 @@
     <!-- CSR -->
     <section id="sec-csr">
       <div class="card"><h2>Generar CSR + clave (descargable)</h2>
-        <div class="muted" style="font-size:12px;margin-bottom:6px">Material local; no toca la PKI. Útil para firmar con cualquier CA.</div>
+        <div class="muted" style="font-size:12px;margin-bottom:6px">Material local; no toca la PKI. Útil para firmar con cualquier CA (incl. Microsoft ADCS).</div>
         <div class="row">
-          <div><label>Common Name (FQDN)</label><input id="c-cn" value="servicio.empresa.com"></div>
-          <div><label>SANs (coma)</label><input id="c-sans" placeholder="www.empresa.com, api.empresa.com"></div>
+          <div><label>Tipo de CSR</label><select id="c-mode" onchange="csrMode()">
+            <option value="leaf">Hoja (servicio/cliente)</option>
+            <option value="sub-ca">CA intermedia (sub-CA · para ADCS)</option>
+          </select></div>
+          <div><label id="c-cn-lbl">Common Name (FQDN)</label><input id="c-cn" value="servicio.empresa.com"></div>
+          <div id="c-sans-wrap"><label>SANs (coma)</label><input id="c-sans" placeholder="www.empresa.com, api.empresa.com"></div>
+          <div id="c-pl-wrap" style="display:none;flex:0"><label>pathlen</label><input id="c-pl" type="number" value="0" min="0" max="5" style="width:80px"></div>
+        </div>
+        <div id="c-subca-note" class="muted" style="display:none;font-size:12px;margin:4px 0">
+          Genera un CSR de sub-CA (CA:true, keyCertSign+cRLSign). Firmalo con la plantilla
+          <b>Subordinate Certification Authority</b> de ADCS y luego importá la cadena (ver docs/external-ca-adcs.md).
         </div>
         <div class="row">
           <div><label>Tipo de clave</label><select id="c-kty" onchange="syncKey('c')"></select></div>
@@ -320,13 +329,23 @@ async function issue(){
 }
 
 // ── CSR ──
+function csrMode(){
+  const sub=$('#c-mode').value==='sub-ca';
+  $('#c-sans-wrap').style.display=sub?'none':'';
+  $('#c-pl-wrap').style.display=sub?'':'none';
+  $('#c-subca-note').style.display=sub?'block':'none';
+  $('#c-cn-lbl').textContent=sub?'Nombre de la sub-CA (CN)':'Common Name (FQDN)';
+  if(sub){ $('#c-cn').value='Empresa Issuing CA'; $('#c-kty').value='RSA'; syncKey('c'); $('#c-kparam').value='4096'; }
+  else { $('#c-cn').value='servicio.empresa.com'; $('#c-kty').value='EC'; syncKey('c'); }
+}
 let CSR={};
 async function genCsr(){
   $('#csr-result').style.display='none'; $('#csrErr').style.display='none';
   const sans=$('#c-sans').value.split(',').map(s=>s.trim()).filter(Boolean);
   try{
     const d=await j('/api/csr',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({common_name:$('#c-cn').value,sans,key_type:$('#c-kty').value,key_param:$('#c-kparam').value})});
+      body:JSON.stringify({common_name:$('#c-cn').value,mode:$('#c-mode').value,sans,
+        key_type:$('#c-kty').value,key_param:$('#c-kparam').value,path_len:parseInt($('#c-pl').value||'0')})});
     CSR=d; $('#csrOut').textContent=d.csr; $('#csr-result').style.display='block';
   }catch(e){$('#csrErr').style.display='block';$('#csrErr').textContent='❌ '+e.message;}
 }

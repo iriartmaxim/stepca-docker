@@ -13,12 +13,15 @@ socket de Docker (manteniendo UI-sin-socket).
 - ⬜ backup-pg / pg-status / pg-failover (vía SQL/endpoints).
 - ⬜ smoke-test / renew / gen-secrets / add-intermediate (guía o ejecución segura).
 
-### 2. CSR de sub-CA + firma con CA externa (Microsoft ADCS)
-- ⬜ "Generar CSR" con **perfil sub-CA**: basicConstraints CA:true (pathlen),
-  KeyUsage keyCertSign+cRLSign, duración/tamaño configurables.
-- ⬜ **Importar cadena firmada** (cert intermedio de ADCS + cadena) y crear una
-  intermedia "externa" operativa (config, DB, provisioner web, registro como emisora).
-- ⬜ Doc: alcances/duración/EKU de sub-CA y flujo ADCS.
+### 2. CSR de sub-CA + firma con CA externa (Microsoft ADCS)  ✅ (núcleo)
+- ✅ "Generar CSR" con **perfil sub-CA** (CA:true, pathlen, keyCertSign+cRLSign,
+  RSA 4096) — toggle en la UI (modo hoja / sub-CA).
+- ✅ **Importar cadena firmada**: `scripts/import-intermediate.sh` crea una intermedia
+  externa operativa (cadena externa = ancla, DB, provisioner web, registro como emisora).
+  Probado con CA externa simulada (emite encadenando a la Root externa).
+- ✅ Doc: `docs/external-ca-adcs.md` (alcances/duración/EKU de sub-CA y flujo ADCS).
+- ⬜ Follow-up: endpoint de la UI para *subir* el cert/cadena firmados y stagearlos
+  (la puesta en marcha sigue siendo acción de host, por el principio UI-sin-socket).
 
 ### 3. Intermedias como ACME + gestión desde la UI
 - ✅ Gestión de provisioners (alta/baja ACME) vía Admin API (ya en `e99cc2c`).
@@ -44,4 +47,5 @@ socket de Docker (manteniendo UI-sin-socket).
 ## Bitácora
 - (init) ROADMAP creado; arranque del ítem #4 (seccionar Estado).
 - #4 ✅ Estado seccionado (CAs/HAProxy/PostgreSQL/Observabilidad) con datos en vivo.
-  Próximo: #2 (CSR sub-CA + import ADCS) — el de mayor alcance.
+- #2 ✅ (núcleo) CSR sub-CA en la UI + import-intermediate.sh (firma ADCS) + doc.
+  Probado con CA externa simulada. Próximo: #5 (Configuración) o #1 (operaciones).

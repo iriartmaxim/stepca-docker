@@ -367,19 +367,28 @@ def issue(req: IssueReq, x_auth_token: str = Header(default="")):
 
 class CsrReq(BaseModel):
     common_name: str
+    mode: str = "leaf"          # "leaf" o "sub-ca"
     sans: list[str] = []
     key_type: str = "EC"
     key_param: str = "P-256"
+    path_len: int = 0           # sólo sub-ca: máximo de niveles bajo esta sub-CA
 
 
 @app.post("/api/csr")
 def gen_csr(req: CsrReq):
-    """Genera un CSR + clave privada con las opciones dadas y los devuelve para
-    descargar. No requiere CA (es material local); no toca la PKI."""
-    cn = req.common_name.strip().lower()
-    if not HOST_RE.match(cn):
-        raise HTTPException(400, "Common Name inválido (debe ser un hostname FQDN)")
-    sans = [s.strip().lower() for s in req.sans if s.strip()] or [cn]
+    """Genera un CSR + clave privada para descargar. Modo 'leaf' (cert de hoja) o
+    'sub-ca' (CA intermedia: CA:true, keyCertSign+cRLSign — para firmar con una CA
+    externa como Microsoft ADCS). Material local; no toca la PKI del stack."""
+    cn = req.common_name.strip()
+    sub_ca = req.mode == "sub-ca"
+    if sub_ca:
+        if not (1 <= len(cn) <= 100):
+            raise HTTPException(400, "Nombre de la sub-CA inválido")
+    else:
+        cn = cn.lower()
+        if not HOST_RE.match(cn):
+            raise HTTPException(400, "Common Name inválido (debe ser un hostname FQDN)")
+    sans = [] if sub_ca else ([s.strip().lower() for s in req.sans if s.strip()] or [cn])
     for s in sans:
         if not HOST_RE.match(s):
             raise HTTPException(400, f"SAN inválido: {s}")
@@ -388,15 +397,22 @@ def gen_csr(req: CsrReq):
         cmd = ["step", "certificate", "create", cn, csr, key, "--csr",
                "--no-password", "--insecure", "--force"]
         cmd += _key_flags(req.key_type, req.key_param)
+        if sub_ca:
+            tpl = os.path.join(td, "ca.tpl")
+            pl = max(0, min(int(req.path_len), 5))
+            with open(tpl, "w") as f:
+                f.write('{ "subject": {{ toJson .Subject }}, '
+                        '"keyUsage": ["certSign","crlSign"], '
+                        '"basicConstraints": {"isCA": true, "maxPathLen": %d} }' % pl)
+            cmd += ["--template", tpl]
         for s in sans:
             cmd += ["--san", s]
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
         if p.returncode != 0 or not os.path.exists(csr):
             raise HTTPException(400, "Error generando CSR: " + (p.stderr or p.stdout))
-        return {"ok": True,
-                "csr": open(csr).read(),
-                "key": open(key).read(),
-                "filename": cn.replace("*", "wildcard")}
+        fn = re.sub(r"[^A-Za-z0-9._-]+", "-", cn).strip("-") or "csr"
+        return {"ok": True, "mode": req.mode,
+                "csr": open(csr).read(), "key": open(key).read(), "filename": fn}
 
 
 # ── Gestión de provisioners (Admin API; auth como super-admin 'step' vía 'web') ──
