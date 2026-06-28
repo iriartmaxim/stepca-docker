@@ -15,7 +15,7 @@ import httpx
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 from fastapi import FastAPI, HTTPException, Header
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, Response
 from pydantic import BaseModel
 
 ROOT_CRT = "/certs/root/root_ca.crt"
@@ -261,6 +261,24 @@ def cert_inspect(file: str):
 def cert_file(file: str):
     """Descarga un certificado emitido del inventario (valida el nombre)."""
     return FileResponse(_safe_issued(file), media_type="application/x-pem-file", filename=file)
+
+
+@app.get("/api/certificates.csv")
+def certificates_csv():
+    """Exporta el inventario de certificados emitidos a CSV (auditoría/ops)."""
+    import csv
+    import io as _io
+    rows = certificates()["certificates"]
+    buf = _io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["common_name", "sans", "status", "expires_in", "not_before",
+                "not_after", "key_type", "serial", "issuer", "file"])
+    for c in rows:
+        w.writerow([c["common_name"], " ".join(c["sans"]), c["status"], c["expires_in"],
+                    c["not_before"], c["not_after"], c["key_type"], c["serial"],
+                    c["issuer"], c["file"]])
+    return Response(buf.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=certificados.csv"})
 
 
 @app.get("/api/root.crt")
