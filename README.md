@@ -1,23 +1,39 @@
 # stepca-docker
 
-PKI jerárquica de 3 niveles con [Smallstep `step-ca`](https://smallstep.com/docs/step-ca/)
-sobre Docker Compose: **Root CA → Intermediate CA → Registration Authority (RA) con ACME**.
+PKI jerárquica con [Smallstep `step-ca`](https://smallstep.com/docs/step-ca/) sobre
+Docker Compose, en topología de **alta disponibilidad**: **Root CA → Intermediate CA
+(2 réplicas) → Registration Authority (2 réplicas) con ACME**, sobre **PostgreSQL**
+compartido y detrás de un **balanceador HAProxy**, con observabilidad y UI incluidas.
 
 ```mermaid
 flowchart TD
-    R["🔐 stepca-root<br/>Root CA · :9000→9000<br/>raíz de confianza"]
-    I["📜 stepca-intermediate<br/>Intermediate CA · :9000→9001<br/>CA emisora"]
-    A["🤖 stepca-ra-one.local<br/>RA · :9100→9100<br/>provisioner ACME"]
-    R -- "firma cert intermedio" --> I
-    I -- "provisioner JWK ra_jwk" --> A
-    A -- "emite certs vía ACME" --> C["clientes (*.local)"]
+    R["🔐 stepca-root<br/>Root CA"]
+    subgraph INT["Intermediate CA (HA)"]
+      I1["stepca-int-1"]; I2["stepca-int-2"]
+    end
+    subgraph RAS["Registration Authority (HA)"]
+      A1["stepca-ra-1"]; A2["stepca-ra-2"]
+    end
+    LB["⚖️ HAProxy<br/>:9001 int · :9100 ra"]
+    PG[("🐘 PostgreSQL<br/>stepca_int / stepca_ra")]
+    R -- "firma cert intermedio" --> INT
+    LB --> INT
+    LB --> RAS
+    RAS -- "ra_jwk vía LB" --> LB
+    INT --- PG
+    RAS --- PG
+    C["clientes (*.local)"] -- "ACME" --> LB
 ```
 
-| Servicio | Rol | Puerto host | DNS interno |
-|----------|-----|-------------|-------------|
-| `stepca-root` | Root CA (raíz de confianza) | `9000` | `stepca-root`, `rootca.local` |
-| `stepca-intermediate` | CA emisora real | `9001` | `stepca-intermediate` |
-| `stepca-ra-one.local` | Registration Authority (ACME) | `9100` | `stepca-ra-one.local` |
+| Servicio | Rol | Puerto host | Notas |
+|----------|-----|-------------|-------|
+| `postgres` | DB compartida (`stepca_int`/`stepca_ra`) | — | habilita la HA |
+| `stepca-root` | Root CA (raíz de confianza) | `9000` | única |
+| `stepca-int-1`/`-2` | Intermediate CA (emisora) | `9001` (vía LB) | 2 réplicas, PostgreSQL |
+| `stepca-ra-1`/`-2` | Registration Authority (ACME) | `9100` (vía LB) | 2 réplicas, PostgreSQL |
+| `haproxy` | Balanceador L4 | `9001`,`9100`,`8404` | alias `stepca-intermediate`, `stepca-ra-one.local` |
+| `prometheus`/`grafana` | Observabilidad | `9090`/`3000` | |
+| `stepca-ui` | Dashboard de administración | `8088` | sólo lectura |
 
 ---
 
@@ -135,23 +151,39 @@ Leé **[SECURITY.md](SECURITY.md)**. Resumen:
 | [examples/](examples/) | Manifiestos de clientes (cert-manager, Traefik, nginx) |
 | [charts/stepca/](charts/stepca/) | Helm chart para Kubernetes |
 
-## Perfiles de despliegue
+## Despliegue
+
+Todo está en un único `compose.yaml` (HA, performance y observabilidad), orquestado
+por `make up`. Overlays opt-in para casos puntuales:
 
 ```bash
-make up                                                              # desarrollo
-make prod                                                           # + límites/hardening
-make ui                                                             # UI de administración (sólo lectura) en :8088
-docker compose -f compose.yaml -f compose.ha.yaml up -d             # HA con PostgreSQL
-docker compose -f compose.yaml -f observability/compose.observability.yaml up -d  # + métricas
+make up                                                   # stack HA completo
+make stats                                                # estado + URL de HAProxy
+make backup-pg                                            # dump de las DBs PostgreSQL
+docker compose -f compose.yaml -f compose.ui-full.yaml up -d --build stepca-ui  # UI con control (privilegiado)
+docker compose -f compose.yaml -f compose.acme-demo.yaml up -d                  # CoreDNS para demo dns-01
 ```
+
+Endpoints: Intermediate `https://localhost:9001` y RA `https://localhost:9100` (vía
+HAProxy), Root `https://localhost:9000`, HAProxy stats `http://localhost:8404`,
+Grafana `:3000`, Prometheus `:9090`, UI `:8088`.
+
+## Alta disponibilidad
+
+- **PostgreSQL** como almacén compartido (`stepca_int`, `stepca_ra`): permite varias
+  réplicas activas de la misma autoridad.
+- **2 réplicas** de Intermediate y **2 de RA** detrás de **HAProxy** (L4, TCP
+  passthrough; los alias `stepca-intermediate` y `stepca-ra-one.local` apuntan al LB).
+- Failover verificado: con una réplica caída, el balanceador sigue sirviendo.
+- Límites de CPU/memoria por servicio (performance acotada y predecible).
 
 ## UI de administración
 
-Dashboard web en `http://localhost:8088` (`make ui`): estado en vivo de las 3 CAs,
-detalle de certificados, descarga de la root y provisioners ACME. Por defecto es
-**sólo lectura** (no monta el socket de Docker). El modo completo (control de
-servicios y emisión http-01) requiere `make ui-full`, que monta `/var/run/docker.sock`
-— una superficie privilegiada, usar sólo en entornos de confianza.
+Dashboard web en `http://localhost:8088` (incluido en `make up`): estado en vivo,
+certificados de las CAs, **inventario de certificados emitidos** y provisioners ACME.
+Por defecto **sólo lectura** (no monta el socket de Docker). El modo completo (control
+de servicios y emisión) se habilita con el overlay `compose.ui-full.yaml`, que monta
+`/var/run/docker.sock` — superficie privilegiada, sólo en entornos de confianza.
 
 ## Roadmap
 

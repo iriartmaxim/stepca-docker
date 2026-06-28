@@ -9,7 +9,7 @@ INTERMEDIATE_PORT ?= 9001
 RA_PORT ?= 9100
 UI_PORT ?= 8088
 
-.PHONY: help secrets env up down restart reset status logs test config pull backup restore renew prod ui ui-down
+.PHONY: help secrets env up down restart reset status logs test config pull backup restore renew ui-full stats backup-pg
 
 help: ## Muestra esta ayuda
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -21,7 +21,7 @@ env: ## Crea .env desde .env.example si no existe
 secrets: ## Genera contraseñas fuertes en secrets/
 	@bash scripts/gen-secrets.sh
 
-up: env ## Levanta el stack completo sin pasos manuales (bootstrap + compose)
+up: env ## Levanta el stack HA completo (Postgres+réplicas+HAProxy+obs+UI) sin pasos manuales
 	@bash scripts/bootstrap.sh
 
 down: ## Detiene el stack (conserva el estado)
@@ -51,11 +51,18 @@ pull: ## Descarga las imágenes
 test: ## Smoke test end-to-end (salud de las 3 CAs)
 	@bash scripts/smoke-test.sh
 
-prod: env secrets ## Levanta el stack con el override de producción
-	@$(COMPOSE) -f compose.yaml -f compose.prod.yaml up -d
+stats: ## Abre info del balanceador (HAProxy stats en :8404)
+	@echo "HAProxy stats: http://localhost:$${HAPROXY_STATS_PORT:-8404}"
+	@$(COMPOSE) ps
 
-backup: ## Backup consistente de DB + secrets (backups/)
+backup: ## Backup consistente de secrets + persistent (backups/)
 	@bash scripts/backup.sh
+
+backup-pg: ## Dump de las bases PostgreSQL a backups/
+	@mkdir -p backups
+	@$(COMPOSE) exec -T postgres pg_dump -U $${PG_USER:-stepca} stepca_int > backups/stepca_int-$$(date +%Y%m%d-%H%M%S).sql
+	@$(COMPOSE) exec -T postgres pg_dump -U $${PG_USER:-stepca} stepca_ra  > backups/stepca_ra-$$(date +%Y%m%d-%H%M%S).sql
+	@echo "✅ Dumps en backups/"
 
 restore: ## Restaura un backup: make restore FILE=backups/xxx.tar.gz
 	@bash scripts/restore.sh "$(FILE)"
@@ -63,14 +70,7 @@ restore: ## Restaura un backup: make restore FILE=backups/xxx.tar.gz
 renew: ## Renueva la intermedia si está por vencer
 	@bash scripts/renew-intermediate.sh
 
-ui: ## Levanta la UI (sólo lectura) en http://localhost:8088
-	@$(COMPOSE) -f compose.yaml -f compose.ui.yaml up -d --build stepca-ui
-	@echo "✅ UI (sólo lectura) en http://localhost:$(UI_PORT)"
-
-ui-full: ## Levanta la UI con control+emisión (⚠️ monta el socket de Docker)
+ui-full: ## Reconfigura la UI con control+emisión (⚠️ monta el socket de Docker)
 	@echo "⚠️  Modo completo: la UI monta /var/run/docker.sock (superficie privilegiada)."
-	@$(COMPOSE) -f compose.yaml -f compose.ui.yaml -f compose.ui-full.yaml up -d --build stepca-ui
+	@$(COMPOSE) -f compose.yaml -f compose.ui-full.yaml up -d --build stepca-ui
 	@echo "✅ UI (control+emisión) en http://localhost:$(UI_PORT)"
-
-ui-down: ## Detiene la UI de administración
-	@$(COMPOSE) -f compose.yaml -f compose.ui.yaml rm -sf stepca-ui

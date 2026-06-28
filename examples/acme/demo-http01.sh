@@ -12,7 +12,7 @@ cd "${ROOT_DIR}"
 
 DOMAIN="${1:-demo.local}"
 IMAGE="$(grep -E '^STEPCA_IMAGE=' .env 2>/dev/null | cut -d= -f2-)"; IMAGE="${IMAGE:-smallstep/step-ca:0.28.3}"
-NET="$(docker inspect stepca-ra-one.local -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}')"
+NET="$(docker inspect stepca-haproxy -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}' 2>/dev/null | head -1)"
 ROOT_CRT="persistent/ra/ra-one/certs/root_ca.crt"
 NAME="acme-http01-demo"
 

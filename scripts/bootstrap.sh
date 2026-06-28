@@ -1,40 +1,48 @@
 #!/usr/bin/env bash
-# Orquesta el despliegue completo de la PKI SIN pasos manuales ni Ansible:
-#   1. genera secretos
-#   2. genera el par de claves del provisioner ra_jwk (idempotente)
-#   3. escribe la config de la intermedia con el provisioner ra_jwk embebido
-#   4. levanta Root + Intermediate y espera a que estén sanas
-#   5. calcula el fingerprint de la Root y escribe la config de la RA
-#   6. levanta la RA
+# Orquesta el despliegue HA completo (PostgreSQL + réplicas + HAProxy) sin pasos
+# manuales: genera secretos, el par de claves ra_jwk, las configs (PostgreSQL) y
+# levanta los servicios en orden.
 set -euo pipefail
-
-# En Git Bash/MSYS (Windows), evita que se conviertan rutas tipo /home/... que
-# pasamos a `docker exec` (no-op en Linux real).
 export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${ROOT_DIR}"
 
-# Imagen (respeta .env si existe)
-IMAGE="$(grep -E '^STEPCA_IMAGE=' .env 2>/dev/null | cut -d= -f2-)"
-IMAGE="${IMAGE:-smallstep/step-ca:0.28.3}"
+# Lee una variable de .env, limpiando comentario inline y espacios (como compose)
+envval() { grep -E "^$1=" .env 2>/dev/null | head -1 | cut -d= -f2- \
+           | sed 's/[[:space:]]*#.*$//' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'; }
+IMAGE="$(envval STEPCA_IMAGE)"; IMAGE="${IMAGE:-smallstep/step-ca:0.28.3}"
+PG_USER="$(envval PG_USER)";    PG_USER="${PG_USER:-stepca}"
+PG_PASSWORD="$(envval PG_PASSWORD)"; PG_PASSWORD="${PG_PASSWORD:-stepca-change-me}"
+INT_PORT="$(envval INTERMEDIATE_PORT)"; INT_PORT="${INT_PORT:-9001}"
+RA_PORT="$(envval RA_PORT)"; RA_PORT="${RA_PORT:-9100}"
 COMPOSE="docker compose"
 
 INT_CFG="persistent/intermediate/config/ca.json"
 RA_DIR="persistent/ra/ra-one"
 RA_KEY="${RA_DIR}/secrets/ra.key.pem"
 RA_PUB="${RA_DIR}/secrets/ra_jwk.pub.json"
+DSN_INT="postgresql://${PG_USER}:${PG_PASSWORD}@postgres:5432/stepca_int?sslmode=disable"
+DSN_RA="postgresql://${PG_USER}:${PG_PASSWORD}@postgres:5432/stepca_ra?sslmode=disable"
 
-echo "▶ [1/6] Secretos…"
+wait_health() { # url, intentos
+  for i in $(seq 1 "${2:-40}"); do
+    curl -sfk --max-time 3 "$1" >/dev/null 2>&1 && return 0
+    sleep 3
+  done
+  return 1
+}
+
+echo "▶ [1/8] Secretos…"
 bash scripts/gen-secrets.sh
 
-echo "▶ [2/6] Estructura de carpetas…"
+echo "▶ [2/8] Estructura de carpetas…"
 mkdir -p persistent/root/{config,certs,secrets} \
-         persistent/intermediate/{config,certs,secrets,db} \
-         persistent/tmp "${RA_DIR}"/{config,certs,secrets,db}
+         persistent/intermediate/{config,certs,secrets} \
+         persistent/tmp persistent/issued "${RA_DIR}"/{config,certs,secrets}
 
-echo "▶ [3/6] Par de claves del provisioner ra_jwk…"
+echo "▶ [3/8] Par de claves del provisioner ra_jwk…"
 if [[ ! -f "${RA_KEY}" || ! -f "${RA_PUB}" ]]; then
   GEN="$(docker run --rm --entrypoint sh "${IMAGE}" -c '
     step crypto jwk create /tmp/pub.json /tmp/priv.json --kty EC --crv P-256 --no-password --insecure >/dev/null 2>&1
@@ -45,13 +53,13 @@ if [[ ! -f "${RA_KEY}" || ! -f "${RA_PUB}" ]]; then
   printf '%s\n' "${GEN}" | sed -n '/===PUBJWK===/,/===RAKEY===/p' | sed '1d;$d' > "${RA_PUB}"
   printf '%s\n' "${GEN}" | sed -n '/===RAKEY===/,$p'            | sed '1d'    > "${RA_KEY}"
   chmod 600 "${RA_KEY}" 2>/dev/null || true
-  echo "  ✔ ra.key.pem y clave pública generadas"
+  echo "  ✔ par de claves generado"
 else
-  echo "  ⏭ ya existen (reutilizando)"
+  echo "  ⏭ ya existe (reutilizando)"
 fi
 PUBJWK="$(cat "${RA_PUB}")"
 
-echo "▶ [3b] Config de la Intermediate CA (con provisioner ra_jwk)…"
+echo "▶ [3b] Config de la Intermediate CA (PostgreSQL + provisioner ra_jwk)…"
 cat > "${INT_CFG}" <<EOF
 {
   "root": "/home/step/certs/root_ca.crt",
@@ -60,57 +68,52 @@ cat > "${INT_CFG}" <<EOF
   "address": ":9000",
   "dnsNames": ["stepca-intermediate","localhost"],
   "logger": {"format": "text"},
-  "db": {"type": "badgerv2", "dataSource": "/home/step/db"},
+  "db": {"type": "postgresql", "dataSource": "${DSN_INT}"},
   "authority": {
     "enableAdmin": false,
-    "claims": {
-      "minTLSCertDuration": "5m",
-      "maxTLSCertDuration": "24h",
-      "defaultTLSCertDuration": "24h"
-    },
-    "provisioners": [
-      { "type": "JWK", "name": "ra_jwk", "key": ${PUBJWK} }
-    ]
+    "claims": { "minTLSCertDuration": "5m", "maxTLSCertDuration": "24h", "defaultTLSCertDuration": "24h" },
+    "provisioners": [ { "type": "JWK", "name": "ra_jwk", "key": ${PUBJWK} } ]
   }
 }
 EOF
 
-echo "▶ [4/6] Levantando Root + Intermediate…"
-${COMPOSE} up -d stepca-root
-# --force-recreate: recarga la config si cambió en una re-ejecución (la DB persiste en su volumen)
-${COMPOSE} up -d --force-recreate stepca-intermediate
-
-echo "  ⏳ esperando salud de la Intermediate…"
+echo "▶ [4/8] PostgreSQL…"
+${COMPOSE} up -d postgres
+echo "  ⏳ esperando a PostgreSQL…"
 for i in $(seq 1 30); do
-  if curl -sfk --max-time 3 "https://localhost:${INTERMEDIATE_PORT:-9001}/health" >/dev/null; then
-    echo "  ✔ Intermediate sana"; break
-  fi
-  sleep 3
-  [[ $i -eq 30 ]] && { echo "❌ Intermediate no respondió"; ${COMPOSE} logs stepca-intermediate | tail -20; exit 1; }
+  docker exec stepca-postgres pg_isready -U "${PG_USER}" -d stepca_int >/dev/null 2>&1 && break
+  sleep 2; [[ $i -eq 30 ]] && { echo "❌ PostgreSQL no respondió"; exit 1; }
 done
+echo "  ✔ PostgreSQL listo"
 
-echo "▶ [5/6] Fingerprint de la Root y config de la RA…"
+echo "▶ [5/8] Root CA…"
+${COMPOSE} up -d stepca-root
+wait_health "https://localhost:${ROOT_PORT:-9000}/health" 40 || { echo "❌ Root no respondió"; exit 1; }
+echo "  ✔ Root sana"
+
+echo "▶ [6/8] Intermediate CA (2 réplicas) + HAProxy…"
+${COMPOSE} up -d --force-recreate stepca-int-1
+sleep 8   # deja que la réplica 1 copie cert/clave al volumen compartido
+${COMPOSE} up -d --force-recreate stepca-int-2
+${COMPOSE} up -d --force-recreate haproxy
+wait_health "https://localhost:${INT_PORT}/health" 40 || { echo "❌ Intermediate (LB) no respondió"; ${COMPOSE} logs --tail=20 stepca-int-1; exit 1; }
+echo "  ✔ Intermediate sana detrás del balanceador"
+
+echo "▶ [7/8] Fingerprint de la Root y config de la RA (PostgreSQL)…"
 FP="$(docker exec stepca-root step certificate fingerprint /home/step/certs/root_ca.crt | tr -d '\r\n')"
-echo "  ✔ fingerprint: ${FP}"
-# Certs de confianza para la RA (healthcheck y cadena)
 cp -f persistent/root/certs/root_ca.crt          "${RA_DIR}/certs/" 2>/dev/null || true
 cp -f persistent/intermediate/certs/intermediate_ca.crt "${RA_DIR}/certs/" 2>/dev/null || true
-
 cat > "${RA_DIR}/config/ca.json" <<EOF
 {
   "address": ":9100",
-  "dnsNames": ["stepca-ra-one.local"],
-  "db": {"type": "badgerv2", "dataSource": "/home/step/db"},
+  "dnsNames": ["stepca-ra-one.local","localhost"],
+  "db": {"type": "postgresql", "dataSource": "${DSN_RA}"},
   "logger": {"format": "text"},
   "authority": {
     "type": "stepcas",
     "certificateAuthority": "https://stepca-intermediate:9000",
     "certificateAuthorityFingerprint": "${FP}",
-    "certificateIssuer": {
-      "type": "jwk",
-      "provisioner": "ra_jwk",
-      "key": "/home/step/secrets/ra.key.pem"
-    },
+    "certificateIssuer": { "type": "jwk", "provisioner": "ra_jwk", "key": "/home/step/secrets/ra.key.pem" },
     "provisioners": [
       { "type": "ACME", "name": "acme-http", "challenges": ["http-01"],
         "policy": { "x509": { "allow": { "dns": ["*.local"] }, "allowWildcardNames": false } } },
@@ -123,22 +126,16 @@ cat > "${RA_DIR}/config/ca.json" <<EOF
         "policy": { "x509": { "allow": { "dns": ["*.local"], "permanentIdentifier": ["*"] } } } }
     ]
   },
-  "tls": {
-    "cipherSuites": ["TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305","TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"],
-    "minVersion": 1.2, "maxVersion": 1.3, "renegotiation": false
-  }
+  "tls": { "cipherSuites": ["TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305","TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"],
+           "minVersion": 1.2, "maxVersion": 1.3, "renegotiation": false }
 }
 EOF
 
-echo "▶ [6/6] Levantando la RA…"
-${COMPOSE} up -d --force-recreate stepca-ra-one.local
+echo "▶ [8/8] RA (2 réplicas) + observabilidad + UI…"
+${COMPOSE} up -d --force-recreate stepca-ra-1 stepca-ra-2
+${COMPOSE} up -d prometheus grafana stepca-ui
+wait_health "https://localhost:${RA_PORT}/health" 50 || { echo "❌ RA (LB) no respondió"; ${COMPOSE} logs --tail=20 stepca-ra-1; exit 1; }
 
-echo "  ⏳ esperando salud de la RA…"
-for i in $(seq 1 30); do
-  if curl -sfk --max-time 3 "https://localhost:${RA_PORT:-9100}/health" >/dev/null; then
-    echo "✅ Stack completo: Root + Intermediate + RA sanas."
-    exit 0
-  fi
-  sleep 3
-done
-echo "❌ La RA no respondió a tiempo"; ${COMPOSE} logs stepca-ra-one.local | tail -20; exit 1
+echo "✅ Stack HA completo: PostgreSQL + 2×Intermediate + 2×RA tras HAProxy + Prometheus/Grafana + UI."
+echo "   Intermediate LB: https://localhost:${INT_PORT}   RA LB: https://localhost:${RA_PORT}"
+echo "   HAProxy stats: http://localhost:$(envval HAPROXY_STATS_PORT || echo 8404)   UI: http://localhost:$(envval UI_PORT || echo 8088)"

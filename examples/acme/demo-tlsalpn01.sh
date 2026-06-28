@@ -14,7 +14,7 @@ DOMAIN="${1:-tlsdemo.local}"
 LEGO_IMG="goacme/lego:latest"
 NAME="acme-tlsalpn-demo"
 ROOT_CRT="persistent/ra/ra-one/certs/root_ca.crt"
-NET="$(docker inspect stepca-ra-one.local -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}' | head -1)"
+NET="$(docker inspect stepca-haproxy -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}' 2>/dev/null | head -1)"
 
 [[ -f "${ROOT_CRT}" ]] || { echo "❌ Falta ${ROOT_CRT}. Corré 'make up' primero."; exit 1; }
 
