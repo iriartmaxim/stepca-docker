@@ -1,0 +1,19 @@
+# UI de administración de la PKI.
+# Uso: docker compose -f compose.yaml -f compose.ui.yaml up -d --build
+#   luego abrir http://localhost:8088
+services:
+  stepca-ui:
+    build: ./ui
+    image: stepca-ui:latest
+    container_name: stepca-ui
+    restart: unless-stopped
+    environment:
+      STEPCA_IMAGE: ${STEPCA_IMAGE:-smallstep/step-ca:0.28.3}
+    ports:
+      - "${UI_PORT:-8088}:8080"
+    volumes:
+      # Socket de Docker para estado y control de servicios
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Certificados de las CAs (sólo lectura) para inspección y descarga
+      - ./persistent/root/certs:/certs/root:ro
+      - ./persistent/intermediate/certs:/certs/intermediate:ro

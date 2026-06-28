@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stepca · administración PKI</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --border:#30363d; --muted:#8b949e;
+    --text:#e6edf3; --accent:#3b82f6; --ok:#3fb950; --bad:#f85149; --warn:#d29922;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:12px;padding:16px 24px;
+    border-bottom:1px solid var(--border);background:var(--panel)}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header .sub{color:var(--muted);font-size:12px}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+  .dot.ok{background:var(--ok)} .dot.bad{background:var(--bad)} .dot.warn{background:var(--warn)}
+  main{max-width:1100px;margin:0 auto;padding:24px;display:grid;gap:24px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px}
+  .card h2{margin:0 0 14px;font-size:14px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+  .ca{border:1px solid var(--border);border-radius:8px;padding:14px;background:#0d1117}
+  .ca .name{font-weight:600;display:flex;align-items:center;gap:8px}
+  .ca .meta{color:var(--muted);font-size:12px;margin-top:6px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--muted);font-weight:500;font-size:12px}
+  code{background:#0d1117;border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-size:12px;word-break:break-all}
+  button{background:#21262d;color:var(--text);border:1px solid var(--border);border-radius:6px;
+    padding:5px 10px;cursor:pointer;font-size:12px}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.danger:hover{border-color:var(--bad);color:var(--bad)}
+  input,select{background:#0d1117;border:1px solid var(--border);color:var(--text);
+    border-radius:6px;padding:7px 10px;font-size:13px}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  pre{background:#0d1117;border:1px solid var(--border);border-radius:8px;padding:12px;
+    overflow:auto;max-height:340px;font-size:12px;margin:10px 0 0}
+  .badge{display:inline-block;background:#1f2937;border:1px solid var(--border);border-radius:20px;
+    padding:1px 9px;font-size:11px;margin:2px 3px 0 0;color:#c9d1d9}
+  .pill{padding:1px 8px;border-radius:20px;font-size:11px}
+  .pill.run{background:rgba(63,185,80,.15);color:var(--ok)}
+  .pill.stop{background:rgba(248,81,73,.15);color:var(--bad)}
+  .pill.absent{background:#21262d;color:var(--muted)}
+  a{color:var(--accent)}
+  .muted{color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <span id="overall" class="dot warn"></span>
+  <div>
+    <h1>stepca · administración de la PKI</h1>
+    <div class="sub">Root → Intermediate → RA (ACME) · actualiza cada 5s</div>
+  </div>
+</header>
+<main>
+  <div class="card">
+    <h2>Estado de las CAs</h2>
+    <div id="status" class="grid"></div>
+  </div>
+
+  <div class="card">
+    <h2>Certificados de las CAs</h2>
+    <div id="cas" class="grid"></div>
+    <div class="row" style="margin-top:12px">
+      <a href="/api/root.crt"><button>⬇ Descargar root_ca.crt</button></a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Provisioners</h2>
+    <div id="provs"></div>
+  </div>
+
+  <div class="card">
+    <h2>Servicios</h2>
+    <table id="services"><thead><tr>
+      <th>Servicio</th><th>Estado</th><th>Imagen</th><th>Acciones</th>
+    </tr></thead><tbody></tbody></table>
+  </div>
+
+  <div class="card">
+    <h2>Emitir certificado (ACME http-01)</h2>
+    <div class="row">
+      <input id="domain" placeholder="miapp.local" value="miapp.local" style="min-width:220px">
+      <button class="primary" onclick="issue()">Emitir</button>
+      <span class="muted">Sólo nombres <code>*.local</code></span>
+    </div>
+    <pre id="issueOut" style="display:none"></pre>
+  </div>
+
+  <div class="card">
+    <h2>Logs</h2>
+    <div class="row">
+      <select id="logsvc"></select>
+      <button onclick="loadLogs()">Ver logs</button>
+    </div>
+    <pre id="logs" style="display:none"></pre>
+  </div>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+async function j(u,o){const r=await fetch(u,o);if(!r.ok)throw new Error(await r.text());return r.json();}
+
+async function loadStatus(){
+  const d = await j('/api/status');
+  $('#status').innerHTML = d.map(c=>`
+    <div class="ca"><div class="name"><span class="dot ${c.healthy?'ok':'bad'}"></span>${c.label}</div>
+    <div class="meta">${c.name}<br>puerto host :${c.host_port} · ${c.healthy?'healthy':'caído'}</div></div>`).join('');
+  const allok = d.every(c=>c.healthy);
+  $('#overall').className = 'dot '+(allok?'ok':(d.some(c=>c.healthy)?'warn':'bad'));
+}
+async function loadCas(){
+  const d = await j('/api/cas');
+  $('#cas').innerHTML = d.map(c=> c.error?`<div class="ca"><div class="name">${c.label}</div><div class="meta">${c.error}</div></div>`:`
+    <div class="ca"><div class="name">${c.label}</div>
+    <div class="meta">
+      <b>Subject:</b> ${c.subject}<br>
+      <b>Issuer:</b> ${c.issuer}<br>
+      <b>Vence:</b> ${c.not_after.slice(0,10)} (${c.days_left} días)<br>
+      <b>SHA256:</b> <code>${c.fingerprint.slice(0,29)}…</code>
+    </div></div>`).join('');
+}
+async function loadProvs(){
+  const d = await j('/api/provisioners');
+  let h='';
+  for(const [ca,list] of Object.entries(d)){
+    h+=`<div style="margin-bottom:10px"><b>${ca}</b><br>`;
+    if(Array.isArray(list)){
+      h+= list.length? list.map(p=>`<span class="badge">${p.name} · ${p.type}${p.challenges?' · '+p.challenges.join(','):''}</span>`).join('') : '<span class="muted">— sin provisioners —</span>';
+    } else { h+=`<span class="muted">${list.error}</span>`; }
+    h+='</div>';
+  }
+  $('#provs').innerHTML=h;
+}
+async function loadServices(){
+  const d = await j('/api/services');
+  $('#services tbody').innerHTML = d.map(s=>{
+    const cls = s.status==='running'?'run':(s.status==='absent'?'absent':'stop');
+    const ctl = s.name==='stepca-ui'||s.status==='absent' ? '<span class="muted">—</span>' :
+      `<button onclick="svc('${s.name}','restart')">↻</button>
+       <button onclick="svc('${s.name}','stop')" class="danger">■</button>
+       <button onclick="svc('${s.name}','start')">▶</button>`;
+    return `<tr><td>${s.name}</td><td><span class="pill ${cls}">${s.status}${s.health?' · '+s.health:''}</span></td>
+      <td class="muted">${s.image}</td><td><div class="row">${ctl}</div></td></tr>`;
+  }).join('');
+  const sel=$('#logsvc'); const cur=sel.value;
+  sel.innerHTML = d.filter(s=>s.status!=='absent').map(s=>`<option>${s.name}</option>`).join('');
+  if(cur) sel.value=cur;
+}
+async function svc(name,action){
+  try{ await j(`/api/services/${name}/${action}`,{method:'POST'}); setTimeout(loadServices,800);}catch(e){alert(e.message);}
+}
+async function issue(){
+  const out=$('#issueOut'); out.style.display='block'; out.textContent='Emitiendo…';
+  try{
+    const d=await j('/api/issue',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({domain:$('#domain').value})});
+    out.textContent=(d.ok?'✅ Certificado emitido\n\n':'⚠️ Revisar salida\n\n')+d.output;
+  }catch(e){out.textContent='❌ '+e.message;}
+}
+async function loadLogs(){
+  const out=$('#logs'); out.style.display='block'; out.textContent='Cargando…';
+  try{const r=await fetch('/api/logs/'+$('#logsvc').value+'?tail=200');out.textContent=await r.text();out.scrollTop=out.scrollHeight;}
+  catch(e){out.textContent=e.message;}
+}
+function tick(){loadStatus();loadServices();}
+async function init(){tick();loadCas();loadProvs();setInterval(tick,5000);setInterval(loadProvs,15000);}
+init();
+</script>
+</body>
+</html>

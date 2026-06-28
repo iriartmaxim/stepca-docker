@@ -7,8 +7,9 @@ COMPOSE := docker compose
 ROOT_PORT ?= 9000
 INTERMEDIATE_PORT ?= 9001
 RA_PORT ?= 9100
+UI_PORT ?= 8088
 
-.PHONY: help secrets env up down restart reset status logs test config pull backup restore renew prod
+.PHONY: help secrets env up down restart reset status logs test config pull backup restore renew prod ui ui-down
 
 help: ## Muestra esta ayuda
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -61,3 +62,10 @@ restore: ## Restaura un backup: make restore FILE=backups/xxx.tar.gz
 
 renew: ## Renueva la intermedia si está por vencer
 	@bash scripts/renew-intermediate.sh
+
+ui: ## Levanta la UI de administración en http://localhost:8088
+	@$(COMPOSE) -f compose.yaml -f compose.ui.yaml up -d --build stepca-ui
+	@echo "✅ UI en http://localhost:$(UI_PORT)"
+
+ui-down: ## Detiene la UI de administración
+	@$(COMPOSE) -f compose.yaml -f compose.ui.yaml rm -sf stepca-ui
