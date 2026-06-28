@@ -145,6 +145,7 @@ Leé **[SECURITY.md](SECURITY.md)**. Resumen:
 | [docs/acme-challenges.md](docs/acme-challenges.md) | Challenges ACME: http-01, dns-01, tls-alpn-01, device-attest-01 |
 | [docs/operations.md](docs/operations.md) | Backup/restore, renovación de la intermedia, logging |
 | [docs/hardening.md](docs/hardening.md) | SOPS, KMS/HSM, Root offline, políticas, CRL/OCSP |
+| [docs/secure-access.md](docs/secure-access.md) | Interacción segura con la PKI (API autenticada, pinning, cliente endurecido) |
 | [docs/observability.md](docs/observability.md) | Prometheus + Grafana |
 | [docs/scaling.md](docs/scaling.md) | Multi-RA y HA con DB externa |
 | [docs/ci.md](docs/ci.md) | Pipeline CI, pin por digest, Dependabot |
@@ -170,12 +171,22 @@ Grafana `:3000`, Prometheus `:9090`, UI `:8088`.
 
 ## Alta disponibilidad
 
-- **PostgreSQL** como almacén compartido (`stepca_int`, `stepca_ra`): permite varias
-  réplicas activas de la misma autoridad.
+- **PostgreSQL primario + standby** (replicación en streaming): las CAs usan un DSN
+  multi-host (`target_session_attrs=read-write`) y reconectan solas al nuevo primario
+  tras un failover. `make pg-failover` promueve el standby; `make pg-status` muestra
+  la replicación.
 - **2 réplicas** de Intermediate y **2 de RA** detrás de **HAProxy** (L4, TCP
   passthrough; los alias `stepca-intermediate` y `stepca-ra-one.local` apuntan al LB).
-- Failover verificado: con una réplica caída, el balanceador sigue sirviendo.
+- Failover verificado end-to-end: caída una réplica de CA el LB sigue sirviendo; y
+  tras promover el standby de Postgres, las CAs siguen **emitiendo** (escritura en DB).
 - Límites de CPU/memoria por servicio (performance acotada y predecible).
+
+## Acceso seguro
+
+Para operar la PKI sin exponer el socket de Docker, usá el **cliente operador
+endurecido** (`make step`): un `step` CLI efímero que ancla la confianza al
+fingerprint de la Root y opera vía la **API autenticada** de step-ca. Detalle del
+modelo en [docs/secure-access.md](docs/secure-access.md).
 
 ## UI de administración
 

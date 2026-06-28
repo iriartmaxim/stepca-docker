@@ -9,7 +9,7 @@ INTERMEDIATE_PORT ?= 9001
 RA_PORT ?= 9100
 UI_PORT ?= 8088
 
-.PHONY: help secrets env up down restart reset status logs test config pull backup restore renew ui-full stats backup-pg pg-failover pg-status
+.PHONY: help secrets env up down restart reset status logs test config pull backup restore renew ui-full stats backup-pg pg-failover pg-status step
 
 help: ## Muestra esta ayuda
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -63,6 +63,9 @@ backup-pg: ## Dump de las bases PostgreSQL a backups/
 	@$(COMPOSE) exec -T pg-primary pg_dump -U $${PG_USER:-stepca} stepca_int > backups/stepca_int-$$(date +%Y%m%d-%H%M%S).sql
 	@$(COMPOSE) exec -T pg-primary pg_dump -U $${PG_USER:-stepca} stepca_ra  > backups/stepca_ra-$$(date +%Y%m%d-%H%M%S).sql
 	@echo "✅ Dumps en backups/"
+
+step: ## Cliente operador seguro (step CLI efímero, root pinneada, sin socket)
+	@bash scripts/step-shell.sh
 
 pg-failover: ## Promueve el standby a primario (failover de PostgreSQL)
 	@bash scripts/pg-failover.sh
