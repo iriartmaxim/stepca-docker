@@ -5,13 +5,15 @@ programada `stepca-ui-features` (cada ~10 h) y el trabajo manual.
 
 ## Ideas principales
 
-### 1. Paridad UI ↔ scripts/
+### 1. Paridad UI ↔ scripts/  🚧
 Llevar a la UI las operaciones de `scripts/` (gated por `UI_TOKEN`), ejecutando vía
 API de step-ca / SQL lo que se pueda, y exponiendo comando/guía lo que requiera el
 socket de Docker (manteniendo UI-sin-socket).
-- ⬜ Sección "Operaciones" en la UI.
-- ⬜ backup-pg / pg-status / pg-failover (vía SQL/endpoints).
-- ⬜ smoke-test / renew / gen-secrets / add-intermediate (guía o ejecución segura).
+- ✅ Sección "Operaciones": catálogo (/api/operations) con comando copiable + descripción
+  (backup, backup-pg, restore, pg-status, pg-failover, add/import-intermediate, renew,
+  smoke, gen-secrets). Las de host se ejecutan en la máquina (UI sin socket).
+- ⬜ Ejecutables vía API/SQL desde la UI (gated por token): revocación, pg-status en vivo,
+  smoke desde el backend.
 
 ### 2. CSR de sub-CA + firma con CA externa (Microsoft ADCS)  ✅ (núcleo)
 - ✅ "Generar CSR" con **perfil sub-CA** (CA:true, pathlen, keyCertSign+cRLSign,
@@ -51,3 +53,4 @@ socket de Docker (manteniendo UI-sin-socket).
   Probado con CA externa simulada. Próximo: #5 (Configuración) o #1 (operaciones).
 
 - #5 🚧 Sección Configuración (lectura): /api/settings + sección en la UI.
+- #1 🚧 Sección Operaciones (catálogo de comandos, /api/operations). Falta ejecución vía API/SQL.

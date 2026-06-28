@@ -73,6 +73,7 @@
     <button data-sec="emitir"><span class="ico">➕</span> Emitir</button>
     <button data-sec="csr"><span class="ico">📝</span> Generar CSR</button>
     <button data-sec="inv"><span class="ico">🗂️</span> Inventario</button>
+    <button data-sec="ops"><span class="ico">🛠️</span> Operaciones</button>
     <button data-sec="config"><span class="ico">⚙️</span> Configuración</button>
   </nav>
 
@@ -191,6 +192,14 @@
       </div>
     </section>
 
+    <!-- OPERACIONES -->
+    <section id="sec-ops">
+      <div class="card"><h2>Operaciones</h2>
+        <div class="muted" style="font-size:12px;margin-bottom:10px">La UI no monta el socket de Docker: estas operaciones se ejecutan en el host. Copiá el comando.</div>
+        <div id="ops"></div>
+      </div>
+    </section>
+
     <!-- CONFIGURACIÓN -->
     <section id="sec-config">
       <div class="card"><h2>UI · emisión</h2><div id="cfg-ui"></div></div>
@@ -220,6 +229,19 @@ async function loadStatus(){
   $('#overall').className='dot '+(d.every(c=>c.healthy)?'ok':(d.some(c=>c.healthy)?'warn':'bad'));
 }
 function kv(o){ return Object.entries(o).map(([k,v])=>`<tr><td class="muted">${k}</td><td>${v==null?'—':(typeof v==='object'?JSON.stringify(v):v)}</td></tr>`).join(''); }
+function cp(t){ navigator.clipboard&&navigator.clipboard.writeText(t); }
+async function loadOps(){
+  try{
+    const d=await j('/api/operations'); const cats={};
+    d.operations.forEach(o=>{(cats[o.cat]=cats[o.cat]||[]).push(o);});
+    $('#ops').innerHTML=Object.entries(cats).map(([cat,list])=>`<div style="margin-bottom:14px"><b>${cat}</b>`+
+      list.map(o=>`<div style="display:flex;gap:8px;align-items:center;margin:6px 0">
+        <button class="ghost" onclick="cp('${o.cmd.replace(/'/g,"\\'")}')">copiar</button>
+        <code style="flex:1">${o.cmd}</code></div>
+        <div class="muted" style="font-size:11px;margin:-2px 0 6px 64px">${o.desc}</div>`).join('')+
+      `</div>`).join('');
+  }catch(e){ $('#ops').innerHTML='<span class="muted">'+e.message+'</span>'; }
+}
 async function loadSettings(){
   try{
     const d=await j('/api/settings'); const u=d.ui, c=d.intermediate;
@@ -403,7 +425,7 @@ async function init(){
     .map(c=>`<label style="display:flex;gap:4px;align-items:center;margin:0"><input type="checkbox" value="${c}" style="width:auto"> ${c}</label>`).join('');
   // carga inicial + refresh
   function tick(){loadStatus();loadCerts();loadHaproxy();loadPg();}
-  tick();loadCas();loadProvs();loadSettings();
+  tick();loadCas();loadProvs();loadSettings();loadOps();
   setInterval(tick,5000);setInterval(loadProvs,15000);setInterval(loadSettings,30000);
 }
 init();

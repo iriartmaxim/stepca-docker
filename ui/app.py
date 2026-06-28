@@ -211,6 +211,37 @@ PG_HOSTS = [h for h in os.environ.get("PG_HOSTS", "pg-primary,pg-standby").split
 INT_CFG_FILE = os.environ.get("INT_CFG_FILE", "/cfg/intermediate/ca.json")
 
 
+OPERATIONS = [
+    {"cat": "Backups", "name": "Backup completo", "kind": "host",
+     "desc": "Tar consistente de secrets + persistent.", "cmd": "make backup"},
+    {"cat": "Backups", "name": "Dump PostgreSQL", "kind": "host",
+     "desc": "pg_dump de stepca_int y stepca_ra a backups/.", "cmd": "make backup-pg"},
+    {"cat": "Backups", "name": "Restore", "kind": "host",
+     "desc": "Restaura un backup.", "cmd": "make restore FILE=backups/stepca-XXXX.tar.gz"},
+    {"cat": "PostgreSQL", "name": "Estado de replicación", "kind": "host",
+     "desc": "pg_stat_replication / recovery (también visible en Estado).", "cmd": "make pg-status"},
+    {"cat": "PostgreSQL", "name": "Failover", "kind": "host",
+     "desc": "Promueve el standby a primario (las CAs reconectan solas).", "cmd": "make pg-failover"},
+    {"cat": "Intermedias", "name": "Agregar intermedia (Root)", "kind": "host",
+     "desc": "Nueva CA intermedia firmada por la Root del stack.", "cmd": "scripts/add-intermediate.sh <id> \"<Nombre>\" <puerto>"},
+    {"cat": "Intermedias", "name": "Importar intermedia (ADCS)", "kind": "host",
+     "desc": "Importa una intermedia firmada por una CA externa.", "cmd": "scripts/import-intermediate.sh <id> \"<Nombre>\" <cert> <cadena> <clave> <puerto>"},
+    {"cat": "Mantenimiento", "name": "Renovar intermedia", "kind": "host",
+     "desc": "Renueva el cert de la intermedia si está por vencer.", "cmd": "make renew"},
+    {"cat": "Mantenimiento", "name": "Smoke test", "kind": "host",
+     "desc": "Salud de las 3 CAs.", "cmd": "make test"},
+    {"cat": "Mantenimiento", "name": "Generar secretos", "kind": "host",
+     "desc": "Contraseñas fuertes (no sobrescribe).", "cmd": "scripts/gen-secrets.sh"},
+]
+
+
+@app.get("/api/operations")
+def operations():
+    """Catálogo de operaciones. Las de host se ejecutan en la máquina (la UI no
+    monta el socket de Docker); las de tipo 'api' se ejecutan desde la UI."""
+    return {"socket_free": True, "operations": OPERATIONS}
+
+
 @app.get("/api/settings")
 def settings():
     """Vista de la configuración vigente (sólo lectura)."""
