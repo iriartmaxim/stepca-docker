@@ -1,0 +1,5 @@
+$ORIGIN test.
+$TTL 30
+@   IN SOA ns.test. admin.test. ( 1 7200 3600 1209600 30 )
+@   IN NS  ns.test.
+ns  IN A   172.31.0.53

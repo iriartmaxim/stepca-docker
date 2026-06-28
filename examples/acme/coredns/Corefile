@@ -1,0 +1,18 @@
+# CoreDNS para el demo dns-01:
+#  - autoritativo de la zona "test" (sirve los TXT _acme-challenge.*)
+#    Se usa .test (no .local) porque .local está reservado para mDNS y el
+#    resolver de step-ca lo rutea a multicast, rompiendo la validación dns-01.
+#  - reenvía todo lo demás al DNS embebido de Docker (127.0.0.11)
+test:53 {
+    file /zones/db.test
+    reload 2s
+    log
+    errors
+}
+
+. {
+    forward . 127.0.0.11
+    cache 5
+    log
+    errors
+}

@@ -115,7 +115,7 @@ cat > "${RA_DIR}/config/ca.json" <<EOF
       { "type": "ACME", "name": "acme-http", "challenges": ["http-01"],
         "policy": { "x509": { "allow": { "dns": ["*.local"] }, "allowWildcardNames": false } } },
       { "type": "ACME", "name": "acme-dns", "challenges": ["dns-01"],
-        "policy": { "x509": { "allow": { "dns": ["*.local"] }, "allowWildcardNames": true } } },
+        "policy": { "x509": { "allow": { "dns": ["*.local","*.test"] }, "allowWildcardNames": true } } },
       { "type": "ACME", "name": "acme-tls", "challenges": ["tls-alpn-01"],
         "policy": { "x509": { "allow": { "dns": ["*.local"] }, "allowWildcardNames": false } } },
       { "type": "ACME", "name": "acme-device", "challenges": ["device-attest-01"],

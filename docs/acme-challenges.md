@@ -55,40 +55,45 @@ certbot certonly --standalone \
   -d demo.local
 ```
 
-## 2. dns-01
+## 2. dns-01  ✅ demo incluido
 
 La RA verifica un registro TXT `_acme-challenge.<dominio>`. Sirve para **wildcards**
-(`*.local`) y cuando no podés exponer el puerto 80. Requiere un proveedor DNS o
-un solver que cree el TXT.
+y cuando no podés exponer puertos. Requiere un servidor DNS que la RA consulte.
 
-`acme.sh` con un proveedor DNS:
+El demo incluye esa infraestructura: `compose.acme-demo.yaml` añade un **CoreDNS**
+autoritativo (red `acme-demo`, IP `172.31.0.53`) y hace que la RA lo use como
+resolver; el cliente lego publica el TXT con el hook `examples/acme/lego-exec.sh`.
 
 ```bash
-export STEP_CA_URL=https://stepca-ra-one.local:9100/acme/acme-dns/directory
-acme.sh --issue --dns dns_cf -d demo.local -d '*.demo.local' \
-  --server "$STEP_CA_URL" --ca-bundle root_ca.crt
+# Levanta CoreDNS, reconfigura la RA y emite el cert con dns-01
+examples/acme/demo-dns01.sh dnsdemo.test
+# Revertir la RA a su DNS normal al terminar:
+docker compose up -d --force-recreate stepca-ra-one.local
 ```
 
-cert-manager (Kubernetes) con solver dns01 — ver
-[../examples/cert-manager-clusterissuer.yaml](../examples/cert-manager-clusterissuer.yaml),
-cambiando `server` a `/acme/acme-dns/directory` y el `solver` a `dns01`.
+> ⚠️ **Dos detalles aprendidos en este repo**:
+> 1. Usá un TLD **`.test`**, no `.local`: `.local` está reservado para mDNS.
+> 2. Un solo TXT por nombre: registros TXT duplicados hacen fallar la validación.
 
-> El CLI `step --standalone` solo implementa http-01; para dns-01 usá acme.sh,
-> certbot con plugin DNS, Caddy o cert-manager.
+`acme.sh` / cert-manager también sirven (cambiando el directory a `/acme/acme-dns/`),
+ver [../examples/cert-manager-clusterissuer.yaml](../examples/cert-manager-clusterissuer.yaml).
 
-## 3. tls-alpn-01
+## 3. tls-alpn-01  ✅ demo incluido
 
 La RA se conecta al **puerto 443** y negocia ALPN `acme-tls/1`. Lo implementan los
-servidores/proxies con ACME embebido, no el CLI `step`.
+clientes/servidores con ACME embebido (lego, Caddy, Traefik); el CLI `step` no.
 
-Caddy (automático):
+```bash
+# Demo con lego (levanta el servidor TLS-ALPN y emite el cert)
+examples/acme/demo-tlsalpn01.sh tlsdemo.local
+```
+
+Caddy:
 
 ```caddyfile
 demo.local {
-  tls {
-    ca https://stepca-ra-one.local:9100/acme/acme-tls/directory
-    ca_root root_ca.crt
-  }
+  tls { ca https://stepca-ra-one.local:9100/acme/acme-tls/directory
+        ca_root root_ca.crt }
   respond "ok"
 }
 ```
@@ -103,26 +108,29 @@ atestiguada por hardware. Formatos habilitados: `step` (agente), `tpm` (TPM 2.0)
 y `apple` (Secure Enclave / MDM). El SAN es un `permanentIdentifier` (p. ej. el
 serial del dispositivo), no un DNS.
 
+El scaffold con TPM por software (swtpm) y el flujo completo están en
+[../examples/acme/demo-deviceattest01.sh](../examples/acme/demo-deviceattest01.sh):
+
 ```bash
-# Ejemplo con clave en TPM via step + smallstep agent (requiere hardware/atestación)
-step ca certificate "device-serial-123" dev.crt dev.key \
-  --provisioner acme-device \
-  --ca-url https://stepca-ra-one.local:9100 \
-  --kms tpmkms: --attestation-uri tpmkms:name=device-key \
-  --root root_ca.crt
+examples/acme/demo-deviceattest01.sh   # imprime el flujo y los requisitos
 ```
 
-> No se incluye demo automatizado: requiere un TPM/Secure Enclave o un emulador
-> (swtpm) y, según el formato, una **attestation CA** registrada en el provisioner.
-> Ver la doc de Smallstep sobre *device attestation* para producción.
+> A diferencia de los otros 3, depende de **hardware de atestación** (o un emulador
+> swtpm) y de registrar la cadena del EK del TPM en `attestationRoots` del
+> provisioner. El provisioner ya está activo; falta la raíz de confianza del EK,
+> específica de cada TPM/fabricante.
 
 ---
 
 ## Resumen de verificación en este repo
 
-| Challenge | Provisioner activo | Demo E2E |
-|-----------|--------------------|----------|
-| http-01 | ✅ | ✅ cert emitido para `demo.local` |
-| dns-01 | ✅ | requiere proveedor DNS (documentado) |
-| tls-alpn-01 | ✅ | requiere servidor ALPN (Caddy/Traefik) |
-| device-attest-01 | ✅ | requiere hardware de atestación |
+| Challenge | Provisioner | Demo E2E (probado) |
+|-----------|-------------|--------------------|
+| http-01 | `acme-http` | ✅ cert emitido (`step --standalone`) |
+| dns-01 | `acme-dns` | ✅ validado con CoreDNS + lego (usar `.test`) |
+| tls-alpn-01 | `acme-tls` | ✅ cert emitido (lego `--tls`) |
+| device-attest-01 | `acme-device` | ⚙️ scaffold (requiere TPM/atestación) |
+
+Infraestructura de demo: `compose.acme-demo.yaml` (CoreDNS) + `examples/acme/`
+(scripts y hooks). Cliente ACME usado: [lego](https://go-acme.github.io/lego/)
+y el CLI `step`.
