@@ -190,6 +190,7 @@
           <th>Common Name / SANs</th><th>Estado</th><th>Vence en</th><th>Emitido</th><th>Tipo</th><th>Serial</th>
         </tr></thead><tbody></tbody></table>
         <div id="certempty" class="muted" style="display:none">Sin certificados en el inventario.</div>
+        <pre id="cert-detail" style="display:none"></pre>
       </div>
     </section>
 
@@ -330,6 +331,23 @@ async function delProv(name,issuer){
   }catch(e){alert('❌ '+e.message);}
 }
 const STLABEL={ok:'vigente',warning:'por vencer',critical:'crítico',expired:'vencido'};
+async function certDetail(file){
+  const out=$('#cert-detail'); out.style.display='block'; out.textContent='Cargando…';
+  try{
+    const c=await j('/api/cert-inspect?file='+encodeURIComponent(file));
+    out.textContent=
+      'Common Name : '+(c.common_name||'—')+'\n'+
+      'SANs        : '+(c.sans||[]).join(', ')+'\n'+
+      'Issuer      : '+c.issuer+'\n'+
+      'Serial      : '+c.serial+'\n'+
+      'Válido      : '+c.not_before.replace('T',' ').slice(0,19)+'  →  '+c.not_after.replace('T',' ').slice(0,19)+'  ('+c.expires_in+')\n'+
+      'Clave       : '+c.key_type+'    Firma: '+(c.signature_algorithm||'')+'\n'+
+      'Key Usage   : '+(c.key_usage||[]).join(', ')+'\n'+
+      'Ext KeyUsage: '+(c.extended_key_usage||[]).join(', ')+'\n'+
+      (c.basic_constraints?('Basic Constr: CA='+c.basic_constraints.ca+(c.basic_constraints.path_len!=null?' pathlen='+c.basic_constraints.path_len:'')+'\n'):'')+
+      'SHA-256     : '+c.fingerprint;
+  }catch(e){ out.textContent='❌ '+e.message; }
+}
 async function loadCerts(){
   const d = await j('/api/certificates'); const s=d.summary;
   $('#certsum').innerHTML =
@@ -343,7 +361,7 @@ async function loadCerts(){
   $('#certs').style.display='';$('#certempty').style.display='none';
   tb.innerHTML = d.certificates.map(c=>{
     const sans=c.sans.length?`<div class="muted" style="font-size:11px">${c.sans.join(', ')}</div>`:'';
-    const dl=c.file?` <a href="/api/cert-file?file=${encodeURIComponent(c.file)}" title="descargar">⬇</a>`:'';
+    const dl=c.file?` <a href="/api/cert-file?file=${encodeURIComponent(c.file)}" title="descargar">⬇</a> <a href="#" title="ver detalle" onclick="certDetail('${(c.file||'').replace(/'/g,"")}');return false">🔍</a>`:'';
     return `<tr><td><b>${c.common_name||'—'}</b>${sans}</td>
       <td><span class="pill ${c.status}">${STLABEL[c.status]||c.status}</span></td>
       <td>${c.expires_in}<div class="muted" style="font-size:11px">${c.not_after.slice(0,16).replace('T',' ')}</div></td>

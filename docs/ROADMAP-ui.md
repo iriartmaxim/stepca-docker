@@ -57,3 +57,4 @@ socket de Docker (manteniendo UI-sin-socket).
 - #1 🚧 Sección Operaciones (catálogo de comandos, /api/operations). Falta ejecución vía API/SQL.
 - #3 ✅ Gestión de provisioners por-emisora (cualquier intermedia, incl. ADCS).
 - ops ✅ Descarga de certificados del inventario (/api/cert-file, validado).
+- ops ✅ Inspección de certificados del inventario (/api/cert-inspect: EKU/KeyUsage/etc.).

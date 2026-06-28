@@ -195,15 +195,55 @@ def certificates():
     return {"summary": summary, "certificates": out}
 
 
-@app.get("/api/cert-file")
-def cert_file(file: str):
-    """Descarga un certificado emitido del inventario (valida el nombre)."""
+def _safe_issued(file):
     if not re.match(r"^[A-Za-z0-9._-]+\.(crt|pem)$", file):
         raise HTTPException(400, "nombre inválido")
     path = os.path.join(ISSUED_DIR, file)
     if not os.path.isfile(path):
         raise HTTPException(404, "no encontrado")
-    return FileResponse(path, media_type="application/x-pem-file", filename=file)
+    return path
+
+
+@app.get("/api/cert-inspect")
+def cert_inspect(file: str):
+    """Detalle de un certificado del inventario (EKU, KeyUsage, SANs, fingerprint)."""
+    path = _safe_issued(file)
+    with open(path, "rb") as f:
+        cert = x509.load_pem_x509_certificate(f.read())
+    base = _cert_summary(cert, file)
+    eku = []
+    try:
+        for o in cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value:
+            eku.append(getattr(o, "_name", None) or o.dotted_string)
+    except x509.ExtensionNotFound:
+        pass
+    ku = []
+    try:
+        k = cert.extensions.get_extension_for_class(x509.KeyUsage).value
+        for name in ("digital_signature", "content_commitment", "key_encipherment",
+                     "data_encipherment", "key_agreement", "key_cert_sign", "crl_sign"):
+            try:
+                if getattr(k, name):
+                    ku.append(name)
+            except ValueError:
+                pass
+    except x509.ExtensionNotFound:
+        pass
+    is_ca = None
+    try:
+        bc = cert.extensions.get_extension_for_class(x509.BasicConstraints).value
+        is_ca = {"ca": bc.ca, "path_len": bc.path_length}
+    except x509.ExtensionNotFound:
+        pass
+    base.update({"extended_key_usage": eku, "key_usage": ku, "basic_constraints": is_ca,
+                 "signature_algorithm": cert.signature_algorithm_oid._name})
+    return base
+
+
+@app.get("/api/cert-file")
+def cert_file(file: str):
+    """Descarga un certificado emitido del inventario (valida el nombre)."""
+    return FileResponse(_safe_issued(file), media_type="application/x-pem-file", filename=file)
 
 
 @app.get("/api/root.crt")
