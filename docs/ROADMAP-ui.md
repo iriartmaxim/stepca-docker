@@ -36,10 +36,11 @@ socket de Docker (manteniendo UI-sin-socket).
 - ✅ Datos en vivo: HAProxy stats (CSV, /api/haproxy), replicación de Postgres
   (/api/pg-status con psycopg2), links a Grafana/Prometheus/Targets.
 
-### 5. Sección Configuración en la UI  🚧
+### 5. Sección Configuración en la UI  ✅ (núcleo)
 - ✅ Lectura: sección Configuración + /api/settings (UI/emisión, claims y provisioners
   de la intermedia, infra Postgres/HAProxy). La UI monta la config de la intermedia ro.
-- ⬜ Edición aplicable donde sea seguro (umbrales UI, claims, políticas).
+- ✅ Edición de umbrales UI (por vencer/crítico) en runtime (/api/settings/ui, persistido).
+- ⬜ Edición de claims/políticas (vía Admin API) — follow-up.
 
 ## Mejoras (post-5)
 - ⬜ Performance: pooling/índices Postgres, tuning step-ca, caché UI, recarga de
@@ -59,3 +60,4 @@ socket de Docker (manteniendo UI-sin-socket).
 - ops ✅ Descarga de certificados del inventario (/api/cert-file, validado).
 - ops ✅ Inspección de certificados del inventario (/api/cert-inspect: EKU/KeyUsage/etc.).
 - #1 ✅ Revocación de certificados desde la UI (/api/revoke, token JWK web).
+- #5 ✅ Edición de umbrales UI en runtime (/api/settings/ui).

@@ -43,6 +43,23 @@ def issue_enabled():
     return bool(UI_TOKEN) and os.path.exists(WEB_PW_FILE)
 
 
+# Config de UI editable en runtime (overrides persistidos; el dir issued es rw)
+UI_CFG_FILE = os.path.join(ISSUED_DIR, "ui-config.json")
+
+
+def _thresholds():
+    warn, crit = WARN_H, CRIT_H
+    try:
+        import json
+        with open(UI_CFG_FILE) as f:
+            d = json.load(f)
+        warn = float(d.get("cert_warn_h", warn))
+        crit = float(d.get("cert_crit_h", crit))
+    except Exception:
+        pass
+    return warn, crit
+
+
 # Servicios de la PKI (etiqueta, URL interna de health)
 CAS = [
     {"name": "stepca-root", "label": "Root CA", "url": "https://stepca-root:9000", "host_port": 9000},
@@ -132,10 +149,10 @@ def _cert_summary(cert, fname=""):
     else:
         d, h = int(secs // 86400), int((secs % 86400) // 3600)
         expires_in = f"{d}d {h}h" if d else f"{h}h {int((secs % 3600)//60)}m"
-        # Umbrales acordes a una CA de vida corta (maxTLSCertDuration 24h):
-        # crítico <2h, por vencer <6h. Overridable con CERT_WARN_H / CERT_CRIT_H.
-        status = ("critical" if secs < CRIT_H*3600 else
-                  ("warning" if secs < WARN_H*3600 else "ok"))
+        # Umbrales (editables en runtime vía /api/settings/ui; default CERT_WARN_H/CRIT_H)
+        warn_h, crit_h = _thresholds()
+        status = ("critical" if secs < crit_h*3600 else
+                  ("warning" if secs < warn_h*3600 else "ok"))
     sans = []
     try:
         ext = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
@@ -297,9 +314,10 @@ def operations():
 def settings():
     """Vista de la configuración vigente (sólo lectura)."""
     import json
+    warn_h, crit_h = _thresholds()
     ui = {
         "issue_enabled": issue_enabled(),
-        "cert_warn_h": WARN_H, "cert_crit_h": CRIT_H,
+        "cert_warn_h": warn_h, "cert_crit_h": crit_h,
         "int_ca_url": INT_CA_URL, "haproxy_stats": HAPROXY_STATS,
         "pg_hosts": PG_HOSTS, "pg_user": PG_USER,
         "issuers": [{"id": k, "label": v["label"], "ca_url": v["ca_url"]} for k, v in ISSUERS.items()],
@@ -324,6 +342,26 @@ def settings():
     except Exception as e:
         ca = {"error": str(e)[:120]}
     return {"ui": ui, "intermediate": ca}
+
+
+class UiCfgReq(BaseModel):
+    cert_warn_h: float
+    cert_crit_h: float
+
+
+@app.post("/api/settings/ui")
+def set_ui_settings(req: UiCfgReq, x_auth_token: str = Header(default="")):
+    """Edita los umbrales de la UI (por vencer / crítico) en runtime."""
+    _require_admin(x_auth_token)
+    if not (0 < req.cert_crit_h <= req.cert_warn_h <= 24*30):
+        raise HTTPException(400, "Umbrales inválidos (0 < crítico ≤ por-vencer ≤ 720h)")
+    import json
+    try:
+        with open(UI_CFG_FILE, "w") as f:
+            json.dump({"cert_warn_h": req.cert_warn_h, "cert_crit_h": req.cert_crit_h}, f)
+    except Exception as e:
+        raise HTTPException(500, "No se pudo guardar: " + str(e)[:100])
+    return {"ok": True, "cert_warn_h": req.cert_warn_h, "cert_crit_h": req.cert_crit_h}
 
 
 @app.get("/api/haproxy")
