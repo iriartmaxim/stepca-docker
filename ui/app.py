@@ -635,19 +635,19 @@ def pg_status():
     return [_pg_node(h) for h in PG_HOSTS]
 
 
-@app.get("/api/audit")
-def audit(limit: int = 150):
-    """Feed de auditoría: emisiones (inventario) + revocaciones (DB), por tiempo."""
-    events = []
-    for c in certificates()["certificates"]:
-        events.append({"ts": c["not_before"], "type": "issued",
-                       "subject": c["common_name"], "serial": c["serial"],
-                       "detail": f"issuer={c['issuer']} · {c['key_type']}"})
+_PTYPE = {1: "JWK", 2: "OIDC", 3: "AWS", 4: "GCP", 5: "Azure", 6: "ACME",
+          7: "X5C", 8: "K8sSA", 9: "SSHPOP", 10: "SCEP", 11: "Nebula"}
+
+
+def _db_audit_events(dbname, label, warn_on_error):
+    """Revocaciones + altas/bajas de provisioner de una DB de intermedia."""
+    out = []
+    suf = f" · CA={label}"
     try:
         import psycopg2
         import json as _json
         conn = psycopg2.connect(host=PG_HOSTS[0], port=5432, user=PG_USER,
-                                password=PG_PASSWORD, dbname="stepca_int", connect_timeout=3)
+                                password=PG_PASSWORD, dbname=dbname, connect_timeout=3)
         cur = conn.cursor()
         cur.execute("SELECT convert_from(nvalue,'UTF8') FROM revoked_x509_certs")
         for (row,) in cur.fetchall():
@@ -658,27 +658,43 @@ def audit(limit: int = 150):
                 serial = d.get("Serial", "")
             method = "ACME" if d.get("ACME") else ("mTLS" if d.get("MTLS") else "token")
             detail = "método=" + method + (f" · motivo={d['Reason']}" if d.get("Reason") else "")
-            events.append({"ts": d.get("RevokedAt"), "type": "revoked",
-                           "subject": "", "serial": serial, "detail": detail})
-        # Altas/bajas de provisioner (acciones admin — NIST AU)
-        ptype = {1: "JWK", 2: "OIDC", 3: "AWS", 4: "GCP", 5: "Azure", 6: "ACME",
-                 7: "X5C", 8: "K8sSA", 9: "SSHPOP", 10: "SCEP", 11: "Nebula"}
+            out.append({"ts": d.get("RevokedAt"), "type": "revoked",
+                        "subject": "", "serial": serial, "detail": detail + suf})
         cur.execute("SELECT convert_from(nvalue,'UTF8') FROM provisioners")
         for (row,) in cur.fetchall():
             d = _json.loads(row)
-            nm, tp = d.get("name", ""), ptype.get(d.get("type"), str(d.get("type")))
+            nm, tp = d.get("name", ""), _PTYPE.get(d.get("type"), str(d.get("type")))
             ca = d.get("createdAt") or ""
             if ca and not ca.startswith("0001"):
-                events.append({"ts": ca, "type": "prov-add", "subject": nm,
-                               "serial": "", "detail": f"provisioner {tp} creado"})
+                out.append({"ts": ca, "type": "prov-add", "subject": nm,
+                            "serial": "", "detail": f"provisioner {tp} creado" + suf})
             da = d.get("deletedAt") or ""
             if da and not da.startswith("0001"):
-                events.append({"ts": da, "type": "prov-remove", "subject": nm,
-                               "serial": "", "detail": f"provisioner {tp} eliminado"})
+                out.append({"ts": da, "type": "prov-remove", "subject": nm,
+                            "serial": "", "detail": f"provisioner {tp} eliminado" + suf})
         conn.close()
     except Exception as e:
-        events.append({"ts": None, "type": "warn", "subject": "",
-                       "serial": "", "detail": "revocaciones DB no disponibles: " + str(e)[:80]})
+        if warn_on_error:
+            out.append({"ts": None, "type": "warn", "subject": "",
+                        "serial": "", "detail": f"DB {dbname} no disponible: " + str(e)[:60]})
+    return out
+
+
+@app.get("/api/audit")
+def audit(limit: int = 200):
+    """Feed de auditoría multi-issuer: emisiones (inventario) + revocaciones y
+    altas/bajas de provisioner de todas las intermedias, por tiempo."""
+    events = []
+    for c in certificates()["certificates"]:
+        events.append({"ts": c["not_before"], "type": "issued",
+                       "subject": c["common_name"], "serial": c["serial"],
+                       "detail": f"issuer={c['issuer']} · {c['key_type']}"})
+    # Principal + intermedias adicionales (DB stepca_int_<id>)
+    events += _db_audit_events("stepca_int", "principal", warn_on_error=True)
+    for iid in ISSUERS:
+        if iid == "default":
+            continue
+        events += _db_audit_events(f"stepca_int_{iid}", ISSUERS[iid]["label"], warn_on_error=False)
     events = [e for e in events if e.get("ts")]
     events.sort(key=lambda e: e["ts"], reverse=True)
     return {"events": events[:limit], "count": len(events)}

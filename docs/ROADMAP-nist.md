@@ -35,7 +35,8 @@ Estado: ⬜ pendiente · 🚧 en curso · ✅ hecho.
   (DB, con método/motivo), seriales correlacionados, ordenada por tiempo (/api/audit).
 - ✅ Exportar audit log a CSV (/api/audit.csv). ⬜ firma del export (follow-up).
 - ✅ Eventos de provisioners (alta/baja, createdAt/deletedAt) en el feed de auditoría.
-- ⬜ Auditoría multi-issuer (revocaciones de int-b/int-c) — follow-up.
+- ✅ Auditoría multi-issuer: revocaciones + provisioners de todas las intermedias
+  (stepca_int_<id>), etiquetadas por CA.
 
 ### A5. Endurecimiento de emisión  ⬜
 - ⬜ UI: edición de claims (duraciones min/max/default) por provisioner vía Admin API.
@@ -66,3 +67,4 @@ notificaciones, reporting/compliance, API keys, multi-tenant, métricas.)
 - ops ✅ Smoke/health EJECUTABLE desde la UI (/api/operations/run/smoke, operator+).
 - B2 ✅ Alertas de vencimiento por webhook (/api/webhook-test, /api/notify-expiring).
 - A4+ ✅ Auditoría con eventos de provisioner (alta/baja) además de emisión/revocación.
+- A4++ ✅ Auditoría multi-issuer (eventos de todas las intermedias, etiquetados por CA).
