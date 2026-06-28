@@ -436,6 +436,55 @@ def pg_status():
     return [_pg_node(h) for h in PG_HOSTS]
 
 
+@app.get("/api/audit")
+def audit(limit: int = 150):
+    """Feed de auditoría: emisiones (inventario) + revocaciones (DB), por tiempo."""
+    events = []
+    for c in certificates()["certificates"]:
+        events.append({"ts": c["not_before"], "type": "issued",
+                       "subject": c["common_name"], "serial": c["serial"],
+                       "detail": f"issuer={c['issuer']} · {c['key_type']}"})
+    try:
+        import psycopg2
+        import json as _json
+        conn = psycopg2.connect(host=PG_HOSTS[0], port=5432, user=PG_USER,
+                                password=PG_PASSWORD, dbname="stepca_int", connect_timeout=3)
+        cur = conn.cursor()
+        cur.execute("SELECT convert_from(nvalue,'UTF8') FROM revoked_x509_certs")
+        for (row,) in cur.fetchall():
+            d = _json.loads(row)
+            try:
+                serial = format(int(d.get("Serial", "0")), "x")
+            except ValueError:
+                serial = d.get("Serial", "")
+            method = "ACME" if d.get("ACME") else ("mTLS" if d.get("MTLS") else "token")
+            detail = "método=" + method + (f" · motivo={d['Reason']}" if d.get("Reason") else "")
+            events.append({"ts": d.get("RevokedAt"), "type": "revoked",
+                           "subject": "", "serial": serial, "detail": detail})
+        conn.close()
+    except Exception as e:
+        events.append({"ts": None, "type": "warn", "subject": "",
+                       "serial": "", "detail": "revocaciones DB no disponibles: " + str(e)[:80]})
+    events = [e for e in events if e.get("ts")]
+    events.sort(key=lambda e: e["ts"], reverse=True)
+    return {"events": events[:limit], "count": len(events)}
+
+
+@app.get("/api/audit.csv")
+def audit_csv():
+    """Exporta el feed de auditoría a CSV."""
+    import csv
+    import io as _io
+    rows = audit(limit=100000)["events"]
+    buf = _io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["ts", "type", "subject", "serial", "detail"])
+    for e in rows:
+        w.writerow([e["ts"], e["type"], e["subject"], e["serial"], e["detail"]])
+    return Response(buf.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=auditoria.csv"})
+
+
 @app.get("/api/provisioners")
 async def provisioners():
     out = {}

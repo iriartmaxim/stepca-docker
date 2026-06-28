@@ -73,6 +73,7 @@
     <button data-sec="emitir"><span class="ico">➕</span> Emitir</button>
     <button data-sec="csr"><span class="ico">📝</span> Generar CSR</button>
     <button data-sec="inv"><span class="ico">🗂️</span> Inventario</button>
+    <button data-sec="audit"><span class="ico">🕓</span> Auditoría</button>
     <button data-sec="ops"><span class="ico">🛠️</span> Operaciones</button>
     <button data-sec="config"><span class="ico">⚙️</span> Configuración</button>
   </nav>
@@ -210,6 +211,16 @@
       </div>
     </section>
 
+    <!-- AUDITORÍA -->
+    <section id="sec-audit">
+      <div class="card"><h2>Auditoría</h2>
+        <div class="muted" style="font-size:12px;margin-bottom:8px">Línea de tiempo: emisiones (inventario) y revocaciones (DB), más recientes primero.</div>
+        <div class="row" style="margin-bottom:8px"><a id="audit-csv" href="/api/audit.csv"><button class="ghost">⬇ Exportar CSV</button></a><span id="audit-count" class="muted" style="font-size:12px;align-self:center"></span></div>
+        <table id="audit-tbl"><thead><tr><th>Fecha (UTC)</th><th>Evento</th><th>Sujeto</th><th>Serial</th><th>Detalle</th></tr></thead><tbody></tbody></table>
+        <div id="audit-empty" class="muted" style="display:none">Sin eventos.</div>
+      </div>
+    </section>
+
     <!-- OPERACIONES -->
     <section id="sec-ops">
       <div class="card"><h2>Operaciones</h2>
@@ -249,6 +260,7 @@ document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('section').forEach(s=>s.classList.remove('active'));
   $('#sec-'+b.dataset.sec).classList.add('active');
   if(b.dataset.sec==='inv') loadCrl();
+  if(b.dataset.sec==='audit') loadAudit();
 });
 
 async function loadStatus(){
@@ -380,6 +392,23 @@ async function revokeCert(file){
     if(!r.ok){alert('❌ '+(await r.text()));return;}
     const d=await r.json(); alert('✅ Revocado (serial '+d.serial+')'); loadCerts();
   }catch(e){alert('❌ '+e.message);}
+}
+const EVLABEL={issued:['emitido','var(--ok)'],revoked:['revocado','var(--bad)'],warn:['aviso','var(--warn)']};
+async function loadAudit(){
+  const tb=$('#audit-tbl tbody');
+  try{
+    const d=await j('/api/audit');
+    $('#audit-count').textContent=d.count+' eventos';
+    if(!d.events.length){ tb.innerHTML=''; $('#audit-tbl').style.display='none'; $('#audit-empty').style.display='block'; return; }
+    $('#audit-tbl').style.display=''; $('#audit-empty').style.display='none';
+    tb.innerHTML=d.events.map(e=>{
+      const lb=EVLABEL[e.type]||[e.type,'inherit'];
+      const ser=e.serial?`<code>${e.serial.slice(0,16)}…</code>`:'';
+      return `<tr><td class="muted">${(e.ts||'').replace('T',' ').slice(0,19)}</td>
+        <td><span class="pill" style="background:${lb[1]};color:#0d1117">${lb[0]}</span></td>
+        <td>${e.subject||'—'}</td><td>${ser}</td><td class="muted">${e.detail||''}</td></tr>`;
+    }).join('');
+  }catch(e){ tb.innerHTML=`<tr><td colspan="5" class="muted">❌ ${e.message}</td></tr>`; }
 }
 async function loadCrl(){
   const iss=$('#crl-issuer').value||'default';

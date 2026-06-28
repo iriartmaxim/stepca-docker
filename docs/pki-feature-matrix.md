@@ -24,7 +24,7 @@ Leyenda: ✅ tiene · 🟡 parcial · ⬜ falta · ★ priorizado para implement
 | 10 | SCEP / EST / CMP | EJBCA (todos), Smallstep (SCEP/EST) | ⬜ (device via ACME) | ⬜ evaluar |
 | 11 | **Plantillas/perfiles** de emisión gestionables | EJBCA (cert profiles), ADCS | 🟡 archivos .tpl | ★ A5 (ver/seleccionar en UI) |
 | 12 | **Operaciones masivas** (bulk revoke/export) | Keyfactor, Venafi | ⬜ | ★ B5 |
-| 13 | **Audit log / trazabilidad** | todos | ⬜ vista | ★ A4 |
+| 13 | **Audit log / trazabilidad** | todos | ✅ vista Auditoría + CSV | — |
 | 14 | Gestión de claves / HSM | EJBCA, todos | ⬜ panel | ★ A2 |
 | 15 | Multi-CA / multi-issuer | EJBCA, Keyfactor | ✅ multi-intermediate | — |
 | 16 | Métricas / observabilidad | Keyfactor, Venafi | ✅ Grafana/Prometheus | — |

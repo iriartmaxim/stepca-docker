@@ -26,9 +26,11 @@ Estado: ⬜ pendiente · 🚧 en curso · ✅ hecho.
 - ⬜ Plantilla CP/CPS (RFC 3647) versionada + link desde la UI.
 - ⬜ UI: editor de `policy.x509` / `policy.ssh` (allow/deny DNS, wildcard) vía Admin API.
 
-### A4. Auditoría y trazabilidad  ⬜
-- ⬜ UI: vista de eventos de CA (emisión/revocación/altas de provisioner) desde la DB.
-- ⬜ Exportar audit log (CSV/JSON) firmado.
+### A4. Auditoría y trazabilidad  ✅ (núcleo)
+- ✅ UI: sección "Auditoría" — línea de tiempo de emisiones (inventario) + revocaciones
+  (DB, con método/motivo), seriales correlacionados, ordenada por tiempo (/api/audit).
+- ✅ Exportar audit log a CSV (/api/audit.csv). ⬜ firma del export (follow-up).
+- ⬜ Sumar eventos de provisioners/admins (tabla provisioners) y multi-issuer.
 
 ### A5. Endurecimiento de emisión  ⬜
 - ⬜ UI: edición de claims (duraciones min/max/default) por provisioner vía Admin API.
@@ -49,3 +51,4 @@ notificaciones, reporting/compliance, API keys, multi-tenant, métricas.)
 - (init) Roadmap creado. Arranque por A1 (CRL).
 - B-research ✅ docs/pki-feature-matrix.md (relevamiento comerciales/OSS).
 - B1 ✅ Inventario: búsqueda/filtrado + chips de estado clickeables.
+- A4 ✅ Sección Auditoría (emisiones+revocaciones, /api/audit + CSV).
