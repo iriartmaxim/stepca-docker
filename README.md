@@ -355,15 +355,29 @@ y [docs/hardening.md](docs/hardening.md).
 
 ## UI de administración
 
-`http://localhost:8088` (FastAPI + frontend sin dependencias), **sin socket de Docker**:
+`http://localhost:8088` (FastAPI + frontend sin dependencias), **sin socket de Docker**.
+Todas las acciones se ejecutan vía la API de step-ca / la DB (no por el socket).
 
-- **Estado** en vivo de Root / Intermediate / RA (health, autorefresh).
-- **Certificados de las CAs**: subject, issuer, fingerprint, validez.
-- **Inventario de certificados emitidos** (`persistent/issued/`): CN/SANs, serial, issuer,
-  tipo de clave, "vence en", estado por color (vigente / por vencer / crítico / vencido) y
-  resumen por estado.
-- **Provisioners** por CA con sus tipos de challenge.
-- **Emisión** (si `UI_TOKEN`): emite `*.local` vía el provisioner `web`, pidiendo el token.
+**Visualización**
+- **Estado** en vivo de Root / Intermediate / RA (health, HAProxy, replicación PostgreSQL).
+- **Certificados de las CAs** e **inventario** de emitidos con **búsqueda y filtro** (CN/SAN/
+  serial + estado), resumen por estado, **inspección** (EKU/KeyUsage/fingerprint), **descarga**
+  y **export CSV**.
+- **Lista de revocación (CRL)** por CA: vigencia, seriales revocados y descarga del CRL.
+- **Auditoría**: línea de tiempo multi-issuer (emisión + revocación + alta/baja de provisioner).
+- **Cumplimiento (NIST)**: tablero en vivo (CRL, custodia de claves, RBAC, vigencia, auditoría,
+  CP/CPS) con score; incluye ver/descargar el **CP/CPS** (RFC 3647).
+
+**Acciones (gated por token, con RBAC `admin`/`operator`/`viewer`)**
+- **Emisión** de `*.local` y **CSR** (hoja o sub-CA) vía el provisioner `web` (operator+).
+- **Revocación** individual y **masiva** sobre el filtro (operator+).
+- **Provisioners**: alta/baja ACME por intermedia, y **edición de claims** de duración (admin).
+- **Configuración**: umbrales de estado y **webhook de alertas** de vencimiento (probar / notificar).
+- **Operaciones**: el *smoke/health* se **ejecuta** desde la UI; las de host quedan como guía.
+
+> RBAC opcional: definí `UI_OPERATOR_TOKEN` / `UI_VIEWER_TOKEN` además de `UI_TOKEN` (admin).
+> Brechas de producción (HSM/PKCS#11, Root offline) en [docs/hardening.md](docs/hardening.md);
+> gobierno en [docs/CP-CPS.md](docs/CP-CPS.md).
 
 ---
 
