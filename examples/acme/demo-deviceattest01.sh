@@ -56,7 +56,7 @@ for pr in d["authority"]["provisioners"]:
 json.dump(d,open(p,"w"),indent=2)
 print("attestationRoots configurado")
 PY
-docker compose up -d --force-recreate stepca-ra-one.local >/dev/null
+docker compose up -d --force-recreate stepca-ra-1 stepca-ra-2 >/dev/null
 until curl -sfk --max-time 3 https://localhost:9100/health >/dev/null 2>&1; do sleep 2; done
 
 echo "▶ [4/4] Atestación y emisión del certificado…"
