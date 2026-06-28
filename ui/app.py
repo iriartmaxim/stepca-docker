@@ -590,6 +590,35 @@ def add_provisioner(req: AddProvReq, x_auth_token: str = Header(default="")):
     return {"ok": True, "output": out.strip() or f"Provisioner '{name}' agregado."}
 
 
+class RevokeReq(BaseModel):
+    file: str
+    issuer: str = "default"
+
+
+@app.post("/api/revoke")
+def revoke(req: RevokeReq, x_auth_token: str = Header(default="")):
+    """Revoca un certificado del inventario (revocación pasiva vía token JWK 'web')."""
+    _require_admin(x_auth_token)
+    iss = ISSUERS.get(req.issuer)
+    if not iss or not os.path.exists(iss["pw_file"]):
+        raise HTTPException(400, "CA emisora inválida")
+    path = _safe_issued(req.file)
+    with open(path, "rb") as f:
+        serial = str(x509.load_pem_x509_certificate(f.read()).serial_number)
+    base = ["--ca-url", iss["ca_url"], "--root", ROOT_CRT]
+    tok = subprocess.run(["step", "ca", "token", serial, "--revoke",
+                          "--provisioner", "web", "--provisioner-password-file", iss["pw_file"]] + base,
+                         capture_output=True, text=True, timeout=20)
+    if tok.returncode != 0:
+        raise HTTPException(400, "Error generando token: " + (tok.stderr or tok.stdout).strip())
+    p = subprocess.run(["step", "ca", "revoke", serial, "--token", tok.stdout.strip()] + base,
+                       capture_output=True, text=True, timeout=20)
+    out = (p.stdout or "") + (p.stderr or "")
+    if p.returncode != 0:
+        raise HTTPException(400, "Error: " + out.strip())
+    return {"ok": True, "serial": serial, "output": out.strip()}
+
+
 @app.delete("/api/provisioners/{name}")
 def remove_provisioner(name: str, issuer: str = "default", x_auth_token: str = Header(default="")):
     """Elimina un provisioner de la intermedia elegida (protege web y ra_jwk)."""

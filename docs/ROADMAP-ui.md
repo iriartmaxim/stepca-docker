@@ -12,7 +12,7 @@ socket de Docker (manteniendo UI-sin-socket).
 - ✅ Sección "Operaciones": catálogo (/api/operations) con comando copiable + descripción
   (backup, backup-pg, restore, pg-status, pg-failover, add/import-intermediate, renew,
   smoke, gen-secrets). Las de host se ejecutan en la máquina (UI sin socket).
-- ⬜ Ejecutables vía API/SQL desde la UI (gated por token): revocación, pg-status en vivo,
+- 🚧 Ejecutables vía API desde la UI (gated por token): ✅ revocación; pg-status en vivo,
   smoke desde el backend.
 
 ### 2. CSR de sub-CA + firma con CA externa (Microsoft ADCS)  ✅ (núcleo)
@@ -58,3 +58,4 @@ socket de Docker (manteniendo UI-sin-socket).
 - #3 ✅ Gestión de provisioners por-emisora (cualquier intermedia, incl. ADCS).
 - ops ✅ Descarga de certificados del inventario (/api/cert-file, validado).
 - ops ✅ Inspección de certificados del inventario (/api/cert-inspect: EKU/KeyUsage/etc.).
+- #1 ✅ Revocación de certificados desde la UI (/api/revoke, token JWK web).

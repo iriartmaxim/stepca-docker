@@ -331,6 +331,17 @@ async function delProv(name,issuer){
   }catch(e){alert('❌ '+e.message);}
 }
 const STLABEL={ok:'vigente',warning:'por vencer',critical:'crítico',expired:'vencido'};
+async function revokeCert(file){
+  if(!confirm('¿Revocar el certificado '+file+'? (revocación pasiva)')) return;
+  const tok=$('#i-token').value||$('#p-token').value||prompt('Token de operador:');
+  if(!tok) return;
+  try{
+    const r=await fetch('/api/revoke',{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':tok},
+      body:JSON.stringify({file,issuer:'default'})});
+    if(!r.ok){alert('❌ '+(await r.text()));return;}
+    const d=await r.json(); alert('✅ Revocado (serial '+d.serial+')'); loadCerts();
+  }catch(e){alert('❌ '+e.message);}
+}
 async function certDetail(file){
   const out=$('#cert-detail'); out.style.display='block'; out.textContent='Cargando…';
   try{
@@ -361,7 +372,8 @@ async function loadCerts(){
   $('#certs').style.display='';$('#certempty').style.display='none';
   tb.innerHTML = d.certificates.map(c=>{
     const sans=c.sans.length?`<div class="muted" style="font-size:11px">${c.sans.join(', ')}</div>`:'';
-    const dl=c.file?` <a href="/api/cert-file?file=${encodeURIComponent(c.file)}" title="descargar">⬇</a> <a href="#" title="ver detalle" onclick="certDetail('${(c.file||'').replace(/'/g,"")}');return false">🔍</a>`:'';
+    const rev=(ADMIN&&c.file)?` <a href="#" title="revocar" onclick="revokeCert('${(c.file||'').replace(/'/g,"")}');return false" style="text-decoration:none">🚫</a>`:'';
+    const dl=c.file?` <a href="/api/cert-file?file=${encodeURIComponent(c.file)}" title="descargar">⬇</a> <a href="#" title="ver detalle" onclick="certDetail('${(c.file||'').replace(/'/g,"")}');return false">🔍</a>${rev}`:'';
     return `<tr><td><b>${c.common_name||'—'}</b>${sans}</td>
       <td><span class="pill ${c.status}">${STLABEL[c.status]||c.status}</span></td>
       <td>${c.expires_in}<div class="muted" style="font-size:11px">${c.not_after.slice(0,16).replace('T',' ')}</div></td>
