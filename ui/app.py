@@ -199,9 +199,28 @@ def _cert_summary(cert, fname=""):
     }
 
 
+_INV_CACHE = {"key": None, "data": None}
+
+
+def _issued_sig():
+    """Firma barata del inventario (cantidad + mtime máximo) para invalidar el caché."""
+    try:
+        files = [f for f in os.listdir(ISSUED_DIR) if f.endswith((".crt", ".pem"))]
+        mt = max((os.path.getmtime(os.path.join(ISSUED_DIR, f)) for f in files), default=0.0)
+        return (len(files), round(mt, 3))
+    except Exception:
+        return (0, 0.0)
+
+
 @app.get("/api/certificates")
 def certificates():
-    """Inventario de certificados emitidos: escanea los PEM en ISSUED_DIR."""
+    """Inventario de certificados emitidos (PEM en ISSUED_DIR).
+
+    Cacheado por (firma del directorio + umbrales): se re-parsea sólo cuando cambia el
+    inventario o los umbrales, evitando re-parsear todos los PEM en cada poll."""
+    key = (_issued_sig(), _thresholds())
+    if _INV_CACHE["key"] == key and _INV_CACHE["data"] is not None:
+        return _INV_CACHE["data"]
     out = []
     if os.path.isdir(ISSUED_DIR):
         for fn in sorted(os.listdir(ISSUED_DIR)):
@@ -222,7 +241,10 @@ def certificates():
         "critical": sum(1 for c in out if c["status"] == "critical"),
         "expired": sum(1 for c in out if c["status"] == "expired"),
     }
-    return {"summary": summary, "certificates": out}
+    result = {"summary": summary, "certificates": out}
+    _INV_CACHE["key"] = key
+    _INV_CACHE["data"] = result
+    return result
 
 
 def _safe_issued(file):

@@ -47,7 +47,8 @@ socket de Docker (manteniendo UI-sin-socket).
   gestionada en DB. Requeriría migrar la policy (afecta la restricción *.local). Pendiente.
 
 ## Mejoras (post-5)
-- ⬜ Performance: pooling/índices Postgres, tuning step-ca, caché UI, recarga de
+- 🟡 Performance: ✅ caché del inventario (parseo PEM) por firma de dir + umbrales
+  (beneficia /api/certificates, /api/audit, /api/compliance). ⬜ pooling PG, recarga de
   provisioners entre réplicas (lag de caché HA).
 - ⬜ Operaciones: revocación CRL/OCSP, rotación de intermedias, exportaciones, renovación auto.
 - ⬜ Configuración: más parámetros editables, perfiles de despliegue.

@@ -68,3 +68,4 @@ notificaciones, reporting/compliance, API keys, multi-tenant, métricas.)
 - B2 ✅ Alertas de vencimiento por webhook (/api/webhook-test, /api/notify-expiring).
 - A4+ ✅ Auditoría con eventos de provisioner (alta/baja) además de emisión/revocación.
 - A4++ ✅ Auditoría multi-issuer (eventos de todas las intermedias, etiquetados por CA).
+- perf ✅ Caché del inventario (parseo PEM) invalidado por firma de dir + umbrales.
