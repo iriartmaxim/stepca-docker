@@ -5,7 +5,7 @@ Estado: ⬜ pendiente · 🚧 en curso · ✅ hecho. Cada avance: commit en main
 1. ⬜ **Emitir**: todas las opciones posibles, cada una con un (?) que explique qué es y para
    qué sirve. Perfiles de uso = **templates**; al elegir un template, autocompletar campos.
 2. ⬜ **Generar CSR**: ídem (opciones + (?) + templates que autocompletan).
-3. ⬜ **Inventario**: el detalle de un cert no debe quedar al fondo sin scroll (modal o
+3. ✅ **Inventario**: detalle en modal (siempre visible) + paginación 10/página.
    inline junto a la fila + scroll a él); **paginar 10 por página**.
 4. ✅ **Quitar Operaciones** por completo (nav + sección + JS + endpoints).
 5. ⬜ **Agregar intermedias**: autodesplegar un step-ca más (+ RA opcional) y que aparezca
@@ -24,3 +24,4 @@ Estado: ⬜ pendiente · 🚧 en curso · ✅ hecho. Cada avance: commit en main
 - (init) Roadmap creado; arranque por #4.
 - #4 ✅ Operaciones eliminado (nav/sección/JS/endpoints).
 - #6+#7 ✅ Estado por rol (Roots/Intermedias/RAs) y CAs en dos cajas; /api/status y /api/cas devuelven role.
+- #3 ✅ Inventario: detalle en modal + paginación 10/pág (Anterior/Siguiente, Esc/backdrop cierran).

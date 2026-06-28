@@ -202,8 +202,8 @@
         <div class="row" style="margin-bottom:8px"><a href="/api/certificates.csv"><button class="ghost">⬇ Exportar CSV</button></a></div>
         <div id="certsum" class="row" style="margin-bottom:10px"></div>
         <div class="row" style="margin-bottom:10px;align-items:flex-end">
-          <div><label>Buscar (CN, SAN, serial)</label><input id="cert-q" placeholder="filtrar…" oninput="renderCerts()"></div>
-          <div style="flex:0"><label>Estado</label><select id="cert-filter" onchange="renderCerts()">
+          <div><label>Buscar (CN, SAN, serial)</label><input id="cert-q" placeholder="filtrar…" oninput="certFilterChanged()"></div>
+          <div style="flex:0"><label>Estado</label><select id="cert-filter" onchange="certFilterChanged()">
             <option value="">todos</option><option value="ok">vigentes</option>
             <option value="warning">por vencer</option><option value="critical">críticos</option>
             <option value="expired">vencidos</option></select></div>
@@ -214,10 +214,21 @@
         <table id="certs"><thead><tr>
           <th>Common Name / SANs</th><th>Estado</th><th>Vence en</th><th>Emitido</th><th>Tipo</th><th>Serial</th>
         </tr></thead><tbody></tbody></table>
+        <div id="cert-pager" class="row" style="margin-top:10px;align-items:center"></div>
         <div id="certempty" class="muted" style="display:none">Sin certificados en el inventario.</div>
-        <pre id="cert-detail" style="display:none"></pre>
       </div>
     </section>
+
+    <!-- Modal de detalle de certificado -->
+    <div id="cert-modal" onclick="closeCertModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:60;align-items:flex-start;justify-content:center;padding:48px 16px">
+      <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;max-width:700px;width:100%;max-height:80vh;overflow:auto;padding:18px" onclick="event.stopPropagation()">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <b id="cert-modal-title">Detalle del certificado</b>
+          <button class="ghost" onclick="closeCertModal()">✕ Cerrar</button>
+        </div>
+        <pre id="cert-detail" style="margin:0;max-height:62vh"></pre>
+      </div>
+    </div>
 
     <!-- AUDITORÍA -->
     <section id="sec-audit">
@@ -532,8 +543,11 @@ async function loadCrl(){
     el.innerHTML=h;
   }catch(e){ el.innerHTML='<span class="muted">❌ '+e.message+'</span>'; }
 }
+function closeCertModal(){ $('#cert-modal').style.display='none'; }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeCertModal(); });
 async function certDetail(file){
-  const out=$('#cert-detail'); out.style.display='block'; out.textContent='Cargando…';
+  const out=$('#cert-detail'); $('#cert-modal').style.display='flex';
+  $('#cert-modal-title').textContent='Detalle · '+file; out.textContent='Cargando…';
   try{
     const c=await j('/api/cert-inspect?file='+encodeURIComponent(file));
     out.textContent=
@@ -549,8 +563,10 @@ async function certDetail(file){
       'SHA-256     : '+c.fingerprint;
   }catch(e){ out.textContent='❌ '+e.message; }
 }
-let ALLCERTS=[], FILTERED=[];
-function setCertFilter(st){ $('#cert-filter').value=st; renderCerts(); }
+let ALLCERTS=[], FILTERED=[], CERT_PAGE=1; const PAGE_SIZE=10;
+function setCertFilter(st){ $('#cert-filter').value=st; CERT_PAGE=1; renderCerts(); }
+function certFilterChanged(){ CERT_PAGE=1; renderCerts(); }
+function gotoCertPage(p){ CERT_PAGE=p; renderCerts(); }
 async function bulkRevoke(){
   const files=FILTERED.filter(c=>c.file).map(c=>c.file);
   if(!files.length){ alert('No hay certificados (con archivo) en el filtro actual.'); return; }
@@ -593,9 +609,16 @@ function renderCerts(){
   $('#cert-count').textContent=`${rows.length} de ${ALLCERTS.length}`;
   $('#bulk-wrap').style.display=ADMIN?'':'none';
   const tb=$('#certs tbody');
-  if(!ALLCERTS.length){tb.innerHTML='';$('#certs').style.display='none';$('#certempty').style.display='block';return;}
+  if(!ALLCERTS.length){tb.innerHTML='';$('#certs').style.display='none';$('#certempty').style.display='block';$('#cert-pager').innerHTML='';return;}
   $('#certs').style.display='';$('#certempty').style.display='none';
-  tb.innerHTML = rows.map(c=>{
+  const pages=Math.max(1,Math.ceil(rows.length/PAGE_SIZE));
+  if(CERT_PAGE>pages) CERT_PAGE=pages;
+  const pageRows=rows.slice((CERT_PAGE-1)*PAGE_SIZE, CERT_PAGE*PAGE_SIZE);
+  $('#cert-pager').innerHTML = pages<=1 ? '' :
+    `<button class="ghost" ${CERT_PAGE<=1?'disabled':''} onclick="gotoCertPage(${CERT_PAGE-1})">‹ Anterior</button>`+
+    `<span class="muted" style="font-size:12px">Página ${CERT_PAGE} de ${pages}</span>`+
+    `<button class="ghost" ${CERT_PAGE>=pages?'disabled':''} onclick="gotoCertPage(${CERT_PAGE+1})">Siguiente ›</button>`;
+  tb.innerHTML = pageRows.map(c=>{
     const sans=c.sans.length?`<div class="muted" style="font-size:11px">${c.sans.join(', ')}</div>`:'';
     const rev=(ADMIN&&c.file)?` <a href="#" title="revocar" onclick="revokeCert('${(c.file||'').replace(/'/g,"")}');return false" style="text-decoration:none">🚫</a>`:'';
     const dl=c.file?` <a href="/api/cert-file?file=${encodeURIComponent(c.file)}" title="descargar">⬇</a> <a href="#" title="ver detalle" onclick="certDetail('${(c.file||'').replace(/'/g,"")}');return false">🔍</a>${rev}`:'';
