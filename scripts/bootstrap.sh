@@ -100,13 +100,13 @@ cat > "${INT_CFG}" <<EOF
   "logger": {"format": "text"},
   "db": {"type": "postgresql", "dataSource": "${DSN_INT}"},
   "authority": {
-    "enableAdmin": false,
+    "enableAdmin": true,
     "claims": { "minTLSCertDuration": "5m", "maxTLSCertDuration": "24h", "defaultTLSCertDuration": "24h" },
     "provisioners": [
-      { "type": "JWK", "name": "ra_jwk", "key": ${PUBJWK} },
       { "type": "JWK", "name": "web", "key": ${WEB_PUB}, "encryptedKey": "${WEB_EK}",
         "policy": { "x509": { "allow": { "dns": ["*.local"] }, "allowWildcardNames": false } },
-        "options": { "x509": { "templateFile": "/home/step/templates/web-leaf.tpl" } } }
+        "options": { "x509": { "templateFile": "/home/step/templates/web-leaf.tpl" } } },
+      { "type": "JWK", "name": "ra_jwk", "key": ${PUBJWK} }
     ]
   }
 }

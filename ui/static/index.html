@@ -91,11 +91,19 @@
 
     <!-- PROVISIONERS -->
     <section id="sec-provs">
-      <div class="card"><h2>Provisioners por CA</h2><div id="provs"></div>
-        <div class="muted" style="font-size:12px;margin-top:10px">
-          La gestión (alta/baja) se hace de forma autenticada vía la Admin API de step-ca
-          (<code>enableAdmin</code>) o regenerando la config — ver docs/secure-access.md.
+      <div class="card"><h2>Provisioners por CA</h2><div id="provs"></div></div>
+      <div class="card" id="prov-manage" style="display:none">
+        <h2>Agregar provisioner ACME (Admin API)</h2>
+        <div class="row">
+          <div><label>Nombre</label><input id="p-name" placeholder="acme-extra"></div>
+          <div><label>Challenges (vacío = todos)</label>
+            <div id="p-challs" style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px;padding-top:6px"></div></div>
         </div>
+        <div class="row">
+          <div><label>Token de operador</label><input id="p-token" type="password" placeholder="UI_TOKEN"></div>
+          <div style="flex:0"><label>&nbsp;</label><button class="primary" onclick="addProv()">Agregar</button></div>
+        </div>
+        <pre id="provOut" style="display:none"></pre>
       </div>
     </section>
 
@@ -187,14 +195,44 @@ async function loadCas(){
       <b>Vence:</b> ${c.not_after.slice(0,10)} (${c.days_left} días)<br>
       <b>SHA256:</b> <code>${c.fingerprint.slice(0,29)}…</code></div></div>`).join('');
 }
+const PROTECTED=['web','ra_jwk'];
+let ADMIN=false;
+function provBadge(p, manageable){
+  const ch=p.challenges?' · '+p.challenges.join(','):'';
+  const del=(manageable && !PROTECTED.includes(p.name))
+    ? ` <a href="#" title="eliminar" onclick="delProv('${p.name}');return false" style="color:var(--bad);text-decoration:none">×</a>` : '';
+  return `<span class="badge">${p.name} · ${p.type}${ch}${del}</span>`;
+}
 async function loadProvs(){
   const d = await j('/api/provisioners'); let h='';
   for(const [ca,list] of Object.entries(d)){
+    const manage = ADMIN && /Intermediate/i.test(ca);
     h+=`<div style="margin-bottom:10px"><b>${ca}</b><br>`;
-    h+= Array.isArray(list) ? (list.length? list.map(p=>`<span class="badge">${p.name} · ${p.type}${p.challenges?' · '+p.challenges.join(','):''}</span>`).join('') : '<span class="muted">— sin provisioners —</span>') : `<span class="muted">${list.error}</span>`;
+    h+= Array.isArray(list) ? (list.length? list.map(p=>provBadge(p,manage)).join('') : '<span class="muted">— sin provisioners —</span>') : `<span class="muted">${list.error}</span>`;
     h+='</div>';
   }
   $('#provs').innerHTML=h;
+}
+async function addProv(){
+  const out=$('#provOut'); out.style.display='block'; out.textContent='Agregando…';
+  const challenges=[...document.querySelectorAll('#p-challs input:checked')].map(c=>c.value);
+  try{
+    const r=await fetch('/api/provisioners',{method:'POST',
+      headers:{'Content-Type':'application/json','X-Auth-Token':$('#p-token').value},
+      body:JSON.stringify({name:$('#p-name').value,challenges})});
+    if(!r.ok){out.textContent='❌ '+(await r.text());return;}
+    const d=await r.json(); out.textContent='✅ '+d.output; loadProvs();
+  }catch(e){out.textContent='❌ '+e.message;}
+}
+async function delProv(name){
+  if(!confirm('¿Eliminar el provisioner '+name+'?')) return;
+  const tok=$('#p-token').value||prompt('Token de operador:');
+  if(!tok) return;
+  try{
+    const r=await fetch('/api/provisioners/'+encodeURIComponent(name),{method:'DELETE',headers:{'X-Auth-Token':tok}});
+    if(!r.ok){alert('❌ '+(await r.text()));return;}
+    loadProvs();
+  }catch(e){alert('❌ '+e.message);}
 }
 const STLABEL={ok:'vigente',warning:'por vencer',critical:'crítico',expired:'vencido'};
 async function loadCerts(){
@@ -269,12 +307,16 @@ async function init(){
     $('#i-profile').innerHTML=Object.entries(pf.profiles).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
     fillKty('i'); fillKty('c');
   }catch(e){}
-  // emisión habilitada?
+  // emisión / gestión habilitada?
   let issueOn=false;
   try{const cfg=await j('/api/config');issueOn=!!cfg.issue_enabled;}catch(e){}
-  $('#mode').textContent=issueOn?'🟢 emisión habilitada (token)':'🔒 sólo lectura';
+  ADMIN=issueOn;
+  $('#mode').textContent=issueOn?'🟢 emisión + gestión (token)':'🔒 sólo lectura';
   $('#issue-form').style.display=issueOn?'':'none';
   $('#issue-disabled').style.display=issueOn?'none':'block';
+  $('#prov-manage').style.display=issueOn?'':'none';
+  $('#p-challs').innerHTML=['http-01','dns-01','tls-alpn-01','device-attest-01']
+    .map(c=>`<label style="display:flex;gap:4px;align-items:center;margin:0"><input type="checkbox" value="${c}" style="width:auto"> ${c}</label>`).join('');
   // carga inicial + refresh
   function tick(){loadStatus();loadCerts();}
   tick();loadCas();loadProvs();

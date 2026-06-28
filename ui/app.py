@@ -318,3 +318,62 @@ def gen_csr(req: CsrReq):
                 "csr": open(csr).read(),
                 "key": open(key).read(),
                 "filename": cn.replace("*", "wildcard")}
+
+
+# ── Gestión de provisioners (Admin API; auth como super-admin 'step' vía 'web') ──
+PROV_NAME_RE = re.compile(r"^[a-zA-Z0-9._-]{1,64}$")
+PROTECTED_PROVS = {"web", "ra_jwk"}          # críticos: no se pueden borrar desde la UI
+PROV_CHALLENGES = ["http-01", "dns-01", "tls-alpn-01", "device-attest-01"]
+
+
+def _admin_args():
+    return ["--admin-provisioner", "web", "--admin-subject", "step",
+            "--admin-password-file", WEB_PW_FILE,
+            "--ca-url", INT_CA_URL, "--root", ROOT_CRT]
+
+
+def _require_admin(token):
+    if not issue_enabled():
+        raise HTTPException(403, "Gestión deshabilitada (faltan UI_TOKEN o el secreto del provisioner web)")
+    if token != UI_TOKEN:
+        raise HTTPException(401, "Token de operador inválido")
+
+
+class AddProvReq(BaseModel):
+    name: str
+    challenges: list[str] = []   # para ACME; vacío = todos
+
+
+@app.post("/api/provisioners")
+def add_provisioner(req: AddProvReq, x_auth_token: str = Header(default="")):
+    """Agrega un provisioner ACME vía la Admin API de step-ca."""
+    _require_admin(x_auth_token)
+    name = req.name.strip()
+    if not PROV_NAME_RE.match(name):
+        raise HTTPException(400, "Nombre inválido (alfanumérico, . _ -)")
+    chs = [c for c in req.challenges if c in PROV_CHALLENGES]
+    cmd = ["step", "ca", "provisioner", "add", name, "--type", "ACME"]
+    for c in chs:
+        cmd += ["--challenge", c]
+    cmd += _admin_args()
+    p = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    out = (p.stdout or "") + (p.stderr or "")
+    if p.returncode != 0:
+        raise HTTPException(400, "Error: " + out.strip())
+    return {"ok": True, "output": out.strip() or f"Provisioner '{name}' agregado."}
+
+
+@app.delete("/api/provisioners/{name}")
+def remove_provisioner(name: str, x_auth_token: str = Header(default="")):
+    """Elimina un provisioner vía la Admin API (protege web y ra_jwk)."""
+    _require_admin(x_auth_token)
+    if not PROV_NAME_RE.match(name):
+        raise HTTPException(400, "Nombre inválido")
+    if name in PROTECTED_PROVS:
+        raise HTTPException(403, f"'{name}' es crítico y no puede eliminarse desde la UI")
+    cmd = ["step", "ca", "provisioner", "remove", name] + _admin_args()
+    p = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    out = (p.stdout or "") + (p.stderr or "")
+    if p.returncode != 0:
+        raise HTTPException(400, "Error: " + out.strip())
+    return {"ok": True, "output": out.strip() or f"Provisioner '{name}' eliminado."}

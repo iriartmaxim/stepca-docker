@@ -20,7 +20,7 @@
 	{{- end }}
 {{- else }}
 	"keyUsage": ["digitalSignature", "keyEncipherment"],
-	"extKeyUsage": ["serverAuth"],
+	"extKeyUsage": ["serverAuth", "clientAuth"],
 {{- end }}
 	"basicConstraints": {"isCA": false}
 }
