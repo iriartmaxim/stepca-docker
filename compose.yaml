@@ -247,15 +247,16 @@ services:
     container_name: stepca-ui
     restart: unless-stopped
     environment:
-      UI_READONLY: "1"
-      STEPCA_IMAGE: *stepca-image
+      # Token de operador: si está vacío, la emisión queda DESHABILITADA (sólo lectura).
+      UI_TOKEN: ${UI_TOKEN:-}
     ports:
       - "${UI_PORT:-8088}:8080"
     volumes:
       - ./persistent/root/certs:/certs/root:ro
       - ./persistent/intermediate/certs:/certs/intermediate:ro
-      # rw para que el modo completo deposite certs; en sólo-lectura la app no escribe
       - ./persistent/issued:/certs/issued
+      # Credencial del provisioner 'web' (emisión segura vía API, sin socket)
+      - ./persistent/ui/web_provisioner_password:/run/secrets/web_provisioner_password:ro
     deploy:
       resources:
         limits: { cpus: "0.50", memory: 256M }

@@ -49,6 +49,19 @@ step ca certificate app.local app.crt app.key \
   --provisioner acme-http --ca-url https://stepca-ra-one.local:9100 --standalone
 ```
 
+## Interacción por web (UI)
+
+La UI (`http://localhost:8088`) aplica el mismo principio: **no monta el socket de
+Docker**. Para emitir certificados desde la web usa la API autenticada de step-ca
+con un provisioner JWK dedicado (`web`), acotado por política (`*.local`):
+
+- el backend sólo tiene la **contraseña del provisioner** (secreto montado), nunca
+  el socket ni la clave de CA;
+- la emisión exige un **token de operador** (`UI_TOKEN`) en el header `X-Auth-Token`;
+- el nombre se valida (regex `*.local`) y la llamada a `step` es por argv (sin shell).
+
+Sin `UI_TOKEN`, la UI queda **sólo lectura**. Es la versión web del cliente `make step`.
+
 ## Buenas prácticas (defensa en profundidad)
 
 - **Mínimo privilegio**: acotá cada provisioner con `policy` (allowlist de nombres) y

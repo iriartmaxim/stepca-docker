@@ -63,7 +63,33 @@ else
 fi
 PUBJWK="$(cat "${RA_PUB}")"
 
-echo "▶ [3b] Config de la Intermediate CA (PostgreSQL + provisioner ra_jwk)…"
+echo "▶ [3c] Provisioner 'web' para emisión segura desde la UI…"
+WEB_DIR="persistent/ui"; mkdir -p "${WEB_DIR}"
+WEB_PW_FILE="${WEB_DIR}/web_provisioner_password"
+[[ -f "${WEB_PW_FILE}" ]] || { openssl rand -base64 24 | tr -d '\n' > "${WEB_PW_FILE}"; }
+WEB_PW="$(cat "${WEB_PW_FILE}")"
+if [[ ! -f "${WEB_DIR}/web.pub.json" || ! -f "${WEB_DIR}/web.ek.txt" ]]; then
+  WGEN="$(docker run --rm -e WEBPW="${WEB_PW}" --entrypoint sh "${IMAGE}" -c '
+    printf "%s" "$WEBPW" > /tmp/pw
+    step crypto jwk create /tmp/pub.json /tmp/key.json --kty EC --crv P-256 --password-file /tmp/pw >/dev/null 2>&1
+    P=$(grep "\"protected\""     /tmp/key.json | sed "s/.*: \"\(.*\)\".*/\1/")
+    E=$(grep "\"encrypted_key\"" /tmp/key.json | sed "s/.*: \"\(.*\)\".*/\1/")
+    IV=$(grep "\"iv\""           /tmp/key.json | sed "s/.*: \"\(.*\)\".*/\1/")
+    C=$(grep "\"ciphertext\""    /tmp/key.json | sed "s/.*: \"\(.*\)\".*/\1/")
+    T=$(grep "\"tag\""           /tmp/key.json | sed "s/.*: \"\(.*\)\".*/\1/")
+    echo "===PUB==="; cat /tmp/pub.json; echo
+    echo "===EK==="; echo "$P.$E.$IV.$C.$T"
+  ')"
+  printf '%s\n' "${WGEN}" | sed -n '/===PUB===/,/===EK===/p' | sed '1d;$d' > "${WEB_DIR}/web.pub.json"
+  printf '%s\n' "${WGEN}" | sed -n '/===EK===/,$p' | sed '1d' | tr -d '\n'    > "${WEB_DIR}/web.ek.txt"
+  echo "  ✔ provisioner web generado"
+else
+  echo "  ⏭ ya existe (reutilizando)"
+fi
+WEB_PUB="$(cat "${WEB_DIR}/web.pub.json")"
+WEB_EK="$(cat "${WEB_DIR}/web.ek.txt")"
+
+echo "▶ [3b] Config de la Intermediate CA (PostgreSQL + provisioners ra_jwk/web)…"
 cat > "${INT_CFG}" <<EOF
 {
   "root": "/home/step/certs/root_ca.crt",
@@ -76,7 +102,11 @@ cat > "${INT_CFG}" <<EOF
   "authority": {
     "enableAdmin": false,
     "claims": { "minTLSCertDuration": "5m", "maxTLSCertDuration": "24h", "defaultTLSCertDuration": "24h" },
-    "provisioners": [ { "type": "JWK", "name": "ra_jwk", "key": ${PUBJWK} } ]
+    "provisioners": [
+      { "type": "JWK", "name": "ra_jwk", "key": ${PUBJWK} },
+      { "type": "JWK", "name": "web", "key": ${WEB_PUB}, "encryptedKey": "${WEB_EK}",
+        "policy": { "x509": { "allow": { "dns": ["*.local"] }, "allowWildcardNames": false } } }
+    ]
   }
 }
 EOF
@@ -138,7 +168,7 @@ EOF
 
 echo "▶ [8/8] RA (2 réplicas) + observabilidad + UI…"
 ${COMPOSE} up -d --force-recreate stepca-ra-1 stepca-ra-2
-${COMPOSE} up -d prometheus grafana stepca-ui
+${COMPOSE} up -d --build prometheus grafana stepca-ui
 wait_health "https://localhost:${RA_PORT}/health" 50 || { echo "❌ RA (LB) no respondió"; ${COMPOSE} logs --tail=20 stepca-ra-1; exit 1; }
 
 echo "✅ Stack HA completo: PostgreSQL + 2×Intermediate + 2×RA tras HAProxy + Prometheus/Grafana + UI."

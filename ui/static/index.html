@@ -89,35 +89,20 @@
       <th>Emitido</th><th>Tipo</th><th>Serial</th>
     </tr></thead><tbody></tbody></table>
     <div id="certempty" class="muted" style="display:none">
-      Sin certificados en el inventario. Se llenan al emitir desde la UI (modo completo)
-      o cuando los demos depositan el cert en <code>persistent/issued/</code>.
+      Sin certificados en el inventario. Se llenan al emitir desde la UI o cuando los
+      demos depositan el cert en <code>persistent/issued/</code>.
     </div>
   </div>
 
-  <div class="card" id="card-services">
-    <h2>Servicios</h2>
-    <table id="services"><thead><tr>
-      <th>Servicio</th><th>Estado</th><th>Imagen</th><th>Acciones</th>
-    </tr></thead><tbody></tbody></table>
-  </div>
-
-  <div class="card" id="card-issue">
-    <h2>Emitir certificado (ACME http-01)</h2>
+  <div class="card" id="card-issue" style="display:none">
+    <h2>Emitir certificado (provisioner web · API autenticada)</h2>
     <div class="row">
-      <input id="domain" placeholder="miapp.local" value="miapp.local" style="min-width:220px">
+      <input id="domain" placeholder="miapp.local" value="miapp.local" style="min-width:200px">
+      <input id="token" type="password" placeholder="token de operador" style="min-width:200px">
       <button class="primary" onclick="issue()">Emitir</button>
-      <span class="muted">Sólo nombres <code>*.local</code></span>
+      <span class="muted">Sólo <code>*.local</code> · sin socket de Docker</span>
     </div>
     <pre id="issueOut" style="display:none"></pre>
-  </div>
-
-  <div class="card" id="card-logs">
-    <h2>Logs</h2>
-    <div class="row">
-      <select id="logsvc"></select>
-      <button onclick="loadLogs()">Ver logs</button>
-    </div>
-    <pre id="logs" style="display:none"></pre>
   </div>
 </main>
 
@@ -156,36 +141,17 @@ async function loadProvs(){
   }
   $('#provs').innerHTML=h;
 }
-async function loadServices(){
-  const d = await j('/api/services');
-  $('#services tbody').innerHTML = d.map(s=>{
-    const cls = s.status==='running'?'run':(s.status==='absent'?'absent':'stop');
-    const ctl = s.name==='stepca-ui'||s.status==='absent' ? '<span class="muted">—</span>' :
-      `<button onclick="svc('${s.name}','restart')">↻</button>
-       <button onclick="svc('${s.name}','stop')" class="danger">■</button>
-       <button onclick="svc('${s.name}','start')">▶</button>`;
-    return `<tr><td>${s.name}</td><td><span class="pill ${cls}">${s.status}${s.health?' · '+s.health:''}</span></td>
-      <td class="muted">${s.image}</td><td><div class="row">${ctl}</div></td></tr>`;
-  }).join('');
-  const sel=$('#logsvc'); const cur=sel.value;
-  sel.innerHTML = d.filter(s=>s.status!=='absent').map(s=>`<option>${s.name}</option>`).join('');
-  if(cur) sel.value=cur;
-}
-async function svc(name,action){
-  try{ await j(`/api/services/${name}/${action}`,{method:'POST'}); setTimeout(loadServices,800);}catch(e){alert(e.message);}
-}
 async function issue(){
   const out=$('#issueOut'); out.style.display='block'; out.textContent='Emitiendo…';
   try{
-    const d=await j('/api/issue',{method:'POST',headers:{'Content-Type':'application/json'},
+    const r=await fetch('/api/issue',{method:'POST',
+      headers:{'Content-Type':'application/json','X-Auth-Token':$('#token').value},
       body:JSON.stringify({domain:$('#domain').value})});
+    if(!r.ok){ out.textContent='❌ '+(await r.text()); return; }
+    const d=await r.json();
     out.textContent=(d.ok?'✅ Certificado emitido\n\n':'⚠️ Revisar salida\n\n')+d.output;
+    if(d.ok) loadCerts();
   }catch(e){out.textContent='❌ '+e.message;}
-}
-async function loadLogs(){
-  const out=$('#logs'); out.style.display='block'; out.textContent='Cargando…';
-  try{const r=await fetch('/api/logs/'+$('#logsvc').value+'?tail=200');out.textContent=await r.text();out.scrollTop=out.scrollHeight;}
-  catch(e){out.textContent=e.message;}
 }
 const STLABEL={ok:'vigente',warning:'por vencer',critical:'crítico',expired:'vencido'};
 async function loadCerts(){
@@ -211,12 +177,12 @@ async function loadCerts(){
       <td><code>${c.serial.slice(0,16)}…</code></td></tr>`;
   }).join('');
 }
-let RO=true;
-function tick(){loadStatus();loadCerts();if(!RO)loadServices();}
+function tick(){loadStatus();loadCerts();}
 async function init(){
-  try{const cfg=await j('/api/config');RO=!!cfg.readonly;}catch(e){RO=true;}
-  $('#mode').textContent = RO ? '🔒 sólo lectura' : '⚙️ control habilitado';
-  if(RO){ for(const id of ['card-services','card-issue','card-logs']){const el=document.getElementById(id);if(el)el.style.display='none';} }
+  let issue=false;
+  try{const cfg=await j('/api/config');issue=!!cfg.issue_enabled;}catch(e){issue=false;}
+  $('#mode').textContent = issue ? '🟢 emisión habilitada (token)' : '🔒 sólo lectura';
+  if(issue) $('#card-issue').style.display='';
   tick();loadCas();loadProvs();
   setInterval(tick,5000);setInterval(loadProvs,15000);
 }

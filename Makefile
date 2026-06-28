@@ -9,7 +9,7 @@ INTERMEDIATE_PORT ?= 9001
 RA_PORT ?= 9100
 UI_PORT ?= 8088
 
-.PHONY: help secrets env up down restart reset status logs test config pull backup restore renew ui-full stats backup-pg pg-failover pg-status step
+.PHONY: help secrets env up down restart reset status logs test config pull backup restore renew stats backup-pg pg-failover pg-status step
 
 help: ## Muestra esta ayuda
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -80,7 +80,3 @@ restore: ## Restaura un backup: make restore FILE=backups/xxx.tar.gz
 renew: ## Renueva la intermedia si está por vencer
 	@bash scripts/renew-intermediate.sh
 
-ui-full: ## Reconfigura la UI con control+emisión (⚠️ monta el socket de Docker)
-	@echo "⚠️  Modo completo: la UI monta /var/run/docker.sock (superficie privilegiada)."
-	@$(COMPOSE) -f compose.yaml -f compose.ui-full.yaml up -d --build stepca-ui
-	@echo "✅ UI (control+emisión) en http://localhost:$(UI_PORT)"

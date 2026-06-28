@@ -161,7 +161,7 @@ por `make up`. Overlays opt-in para casos puntuales:
 make up                                                   # stack HA completo
 make stats                                                # estado + URL de HAProxy
 make backup-pg                                            # dump de las DBs PostgreSQL
-docker compose -f compose.yaml -f compose.ui-full.yaml up -d --build stepca-ui  # UI con control (privilegiado)
+make step                                                 # cliente operador seguro (CLI)
 docker compose -f compose.yaml -f compose.acme-demo.yaml up -d                  # CoreDNS para demo dns-01
 ```
 
@@ -188,13 +188,20 @@ endurecido** (`make step`): un `step` CLI efímero que ancla la confianza al
 fingerprint de la Root y opera vía la **API autenticada** de step-ca. Detalle del
 modelo en [docs/secure-access.md](docs/secure-access.md).
 
-## UI de administración
+## UI de administración (web)
 
-Dashboard web en `http://localhost:8088` (incluido en `make up`): estado en vivo,
-certificados de las CAs, **inventario de certificados emitidos** y provisioners ACME.
-Por defecto **sólo lectura** (no monta el socket de Docker). El modo completo (control
-de servicios y emisión) se habilita con el overlay `compose.ui-full.yaml`, que monta
-`/var/run/docker.sock` — superficie privilegiada, sólo en entornos de confianza.
+Dashboard web en `http://localhost:8088` (incluido en `make up`), **sin socket de
+Docker**: estado en vivo, certificados de las CAs, inventario de certificados emitidos
+y provisioners.
+
+**Emisión desde la web, de forma segura**: si definís `UI_TOKEN` en `.env`, la UI
+habilita emitir certificados `*.local` vía la **API autenticada de step-ca** (provisioner
+JWK `web`, acotado por política), pidiendo ese token de operador. No usa el socket de
+Docker ni claves embebidas: el backend sólo tiene la **contraseña del provisioner**
+(secreto montado). Detalle del modelo en [docs/secure-access.md](docs/secure-access.md).
+
+Para operar por **CLI** de forma equivalente: `make step` (cliente `step` efímero con
+pinning de la Root).
 
 ## Roadmap
 

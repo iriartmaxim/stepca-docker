@@ -1,32 +1,40 @@
 """
 stepca-ui — Dashboard de administración para la PKI stepca-docker.
-Backend FastAPI: estado de las CAs, certificados, provisioners ACME,
-control de servicios Docker, logs, descarga de root y emisión http-01.
+Backend FastAPI (sin socket de Docker): estado de las CAs, certificados,
+provisioners, descarga de root, y emisión SEGURA vía la API autenticada de
+step-ca (provisioner JWK 'web', gated por token de operador).
 """
-import io
 import os
 import re
-import tarfile
+import shutil
+import subprocess
+import tempfile
 import datetime as dt
 
 import httpx
-import docker
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, PlainTextResponse, Response, FileResponse
+from fastapi import FastAPI, HTTPException, Header
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 
-STEPCA_IMAGE = os.environ.get("STEPCA_IMAGE", "smallstep/step-ca:0.28.3")
-# Modo seguro por defecto: sin socket de Docker (sólo lectura: estado, certs, provisioners).
-READONLY = os.environ.get("UI_READONLY", "1") == "1"
 ROOT_CRT = "/certs/root/root_ca.crt"
 INT_CRT = "/certs/root/intermediate_ca.crt"
 ISSUED_DIR = "/certs/issued"  # certificados emitidos (PEM) para inventario
 WARN_H = float(os.environ.get("CERT_WARN_H", "6"))   # "por vencer" si quedan < N horas
 CRIT_H = float(os.environ.get("CERT_CRIT_H", "2"))   # "crítico" si quedan < N horas
 
-# Servicios de la PKI (nombre de contenedor, etiqueta, URL interna de health)
+# Emisión segura (sin socket): provisioner JWK 'web' + token de operador.
+WEB_PW_FILE = os.environ.get("WEB_PROVISIONER_PW_FILE", "/run/secrets/web_provisioner_password")
+UI_TOKEN = os.environ.get("UI_TOKEN", "")
+INT_CA_URL = os.environ.get("INT_CA_URL", "https://stepca-intermediate:9000")
+
+
+def issue_enabled():
+    return bool(UI_TOKEN) and os.path.exists(WEB_PW_FILE)
+
+
+# Servicios de la PKI (etiqueta, URL interna de health)
 CAS = [
     {"name": "stepca-root", "label": "Root CA", "url": "https://stepca-root:9000", "host_port": 9000},
     {"name": "stepca-intermediate", "label": "Intermediate CA", "url": "https://stepca-intermediate:9000", "host_port": 9001},
@@ -35,21 +43,13 @@ CAS = [
 
 app = FastAPI(title="stepca-ui")
 
-# Allowlist de contenedores controlables (evita controlar cualquier contenedor del host)
-MANAGED = {c["name"] for c in CAS} | {"stepca-challenge-dns"}
-# Hostname válido y restringido a *.local (anti command-injection)
+# Hostname válido y restringido a *.local (defensa adicional; igual se usa argv sin shell)
 DOMAIN_RE = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+local$")
-
-
-def dk():
-    if READONLY:
-        raise HTTPException(403, "UI en modo sólo-lectura (sin socket de Docker)")
-    return docker.from_env()
 
 
 @app.get("/api/config")
 def config():
-    return {"readonly": READONLY}
+    return {"issue_enabled": issue_enabled()}
 
 
 async def _get(url, path):
@@ -204,117 +204,37 @@ async def provisioners():
     return out
 
 
-@app.get("/api/services")
-def services():
-    out = []
-    names = [c["name"] for c in CAS] + ["stepca-challenge-dns", "stepca-ui"]
-    client = dk()
-    for n in names:
-        try:
-            c = client.containers.get(n)
-            health = ""
-            try:
-                health = c.attrs["State"].get("Health", {}).get("Status", "")
-            except Exception:
-                pass
-            out.append({"name": n, "status": c.status, "health": health,
-                        "image": (c.image.tags or ["?"])[0]})
-        except docker.errors.NotFound:
-            out.append({"name": n, "status": "absent", "health": "", "image": "-"})
-    return out
-
-
-@app.post("/api/services/{name}/{action}")
-def service_action(name: str, action: str):
-    if action not in {"start", "stop", "restart"}:
-        raise HTTPException(400, "acción inválida")
-    if name not in MANAGED:
-        raise HTTPException(403, "servicio no administrable")
-    try:
-        c = dk().containers.get(name)
-        getattr(c, action)()
-        return {"ok": True, "name": name, "action": action}
-    except docker.errors.NotFound:
-        raise HTTPException(404, "contenedor no encontrado")
-
-
-@app.get("/api/logs/{name}", response_class=PlainTextResponse)
-def logs(name: str, tail: int = 200):
-    if name not in MANAGED | {"stepca-ui"}:
-        raise HTTPException(403, "servicio no administrable")
-    tail = max(1, min(int(tail), 2000))
-    try:
-        c = dk().containers.get(name)
-        return c.logs(tail=tail).decode(errors="replace")
-    except docker.errors.NotFound:
-        raise HTTPException(404, "contenedor no encontrado")
-
-
 class IssueReq(BaseModel):
     domain: str
 
 
-def _stack_network():
-    ra = dk().containers.get("stepca-ra-one.local")
-    nets = list(ra.attrs["NetworkSettings"]["Networks"].keys())
-    for n in nets:
-        if n.endswith("_default"):
-            return n
-    return nets[0]
-
-
 @app.post("/api/issue")
-def issue(req: IssueReq):
-    """Emite un certificado para <domain> vía ACME http-01 (provisioner acme-http)."""
+def issue(req: IssueReq, x_auth_token: str = Header(default="")):
+    """Emite un certificado para <domain> vía la API autenticada de step-ca
+    (provisioner JWK 'web'), SIN socket de Docker. Requiere token de operador."""
+    if not issue_enabled():
+        raise HTTPException(403, "Emisión deshabilitada (faltan UI_TOKEN o el secreto del provisioner web)")
+    if x_auth_token != UI_TOKEN:
+        raise HTTPException(401, "Token de operador inválido")
     domain = req.domain.strip().lower()
-    # Validación estricta: hostname *.local. Evita inyección de comandos/argumentos.
-    if not DOMAIN_RE.match(domain):
+    if not DOMAIN_RE.match(domain):  # defensa adicional (igual se usa argv, sin shell)
         raise HTTPException(400, "Nombre inválido: se permite sólo un hostname *.local")
-    client = dk()
-    net = _stack_network()
-    api = client.api
-    netconf = api.create_networking_config(
-        {net: api.create_endpoint_config(aliases=[domain])})
-    cid = api.create_container(
-        STEPCA_IMAGE, entrypoint="sh", command=["-c", "sleep 90"], user="0",
-        networking_config=netconf,
-        host_config=api.create_host_config(auto_remove=False))["Id"]
-    try:
-        api.start(cid)
-        # inyectar root_ca.crt
-        buf = io.BytesIO()
-        with open(ROOT_CRT, "rb") as f:
-            data = f.read()
-        with tarfile.open(fileobj=buf, mode="w") as tar:
-            ti = tarfile.TarInfo("root_ca.crt")
-            ti.size = len(data)
-            tar.addfile(ti, io.BytesIO(data))
-        buf.seek(0)
-        api.put_archive(cid, "/", buf.read())
-        # exec por argv (sin shell): el dominio nunca se interpreta por sh
-        issue_cmd = ["step", "ca", "certificate", domain, "/tmp/d.crt", "/tmp/d.key",
-                     "--provisioner", "acme-http",
-                     "--ca-url", "https://stepca-ra-one.local:9100",
-                     "--root", "/root_ca.crt", "--standalone"]
-        ex = api.exec_create(cid, issue_cmd)
-        out = api.exec_start(ex).decode(errors="replace")
-        rc = api.exec_inspect(ex).get("ExitCode", 1)
+    with tempfile.TemporaryDirectory() as td:
+        crt, key = os.path.join(td, "d.crt"), os.path.join(td, "d.key")
+        cmd = ["step", "ca", "certificate", domain, crt, key,
+               "--provisioner", "web", "--provisioner-password-file", WEB_PW_FILE,
+               "--ca-url", INT_CA_URL, "--root", ROOT_CRT, "--force"]
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        ok = p.returncode == 0 and os.path.exists(crt)
+        out = (p.stdout or "") + (p.stderr or "")
         inspect = ""
-        if rc == 0:
-            ix = api.exec_create(cid, ["step", "certificate", "inspect", "/tmp/d.crt", "--short"])
-            inspect = api.exec_start(ix).decode(errors="replace")
-            # Guardar el cert emitido en el inventario (si el dir es escribible)
-            try:
-                cat = api.exec_create(cid, ["cat", "/tmp/d.crt"])
-                pem = api.exec_start(cat)
+        if ok:
+            ins = subprocess.run(["step", "certificate", "inspect", crt, "--short"],
+                                 capture_output=True, text=True)
+            inspect = ins.stdout
+            try:  # guardar en el inventario
                 os.makedirs(ISSUED_DIR, exist_ok=True)
-                with open(os.path.join(ISSUED_DIR, f"{domain}.crt"), "wb") as f:
-                    f.write(pem)
+                shutil.copy(crt, os.path.join(ISSUED_DIR, f"{domain}.crt"))
             except Exception:
                 pass
-        return {"ok": rc == 0, "output": out + ("\n----- inspect -----\n" + inspect if inspect else "")}
-    finally:
-        try:
-            api.remove_container(cid, force=True)
-        except Exception:
-            pass
+        return {"ok": ok, "output": out + (("\n----- inspect -----\n" + inspect) if inspect else "")}
