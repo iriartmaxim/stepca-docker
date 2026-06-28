@@ -76,7 +76,9 @@ cat > "${INT_CFG}" <<EOF
 EOF
 
 echo "▶ [4/6] Levantando Root + Intermediate…"
-${COMPOSE} up -d stepca-root stepca-intermediate
+${COMPOSE} up -d stepca-root
+# --force-recreate: recarga la config si cambió en una re-ejecución (la DB persiste en su volumen)
+${COMPOSE} up -d --force-recreate stepca-intermediate
 
 echo "  ⏳ esperando salud de la Intermediate…"
 for i in $(seq 1 30); do
@@ -110,8 +112,15 @@ cat > "${RA_DIR}/config/ca.json" <<EOF
       "key": "/home/step/secrets/ra.key.pem"
     },
     "provisioners": [
-      { "type": "ACME", "name": "acme",
-        "policy": { "x509": { "allow": { "dns": ["*.local"] }, "allowWildcardNames": false } } }
+      { "type": "ACME", "name": "acme-http", "challenges": ["http-01"],
+        "policy": { "x509": { "allow": { "dns": ["*.local"] }, "allowWildcardNames": false } } },
+      { "type": "ACME", "name": "acme-dns", "challenges": ["dns-01"],
+        "policy": { "x509": { "allow": { "dns": ["*.local"] }, "allowWildcardNames": true } } },
+      { "type": "ACME", "name": "acme-tls", "challenges": ["tls-alpn-01"],
+        "policy": { "x509": { "allow": { "dns": ["*.local"] }, "allowWildcardNames": false } } },
+      { "type": "ACME", "name": "acme-device", "challenges": ["device-attest-01"],
+        "attestationFormats": ["step","tpm","apple"],
+        "policy": { "x509": { "allow": { "dns": ["*.local"], "permanentIdentifier": ["*"] } } } }
     ]
   },
   "tls": {
@@ -122,7 +131,7 @@ cat > "${RA_DIR}/config/ca.json" <<EOF
 EOF
 
 echo "▶ [6/6] Levantando la RA…"
-${COMPOSE} up -d stepca-ra-one.local
+${COMPOSE} up -d --force-recreate stepca-ra-one.local
 
 echo "  ⏳ esperando salud de la RA…"
 for i in $(seq 1 30); do

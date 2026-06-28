@@ -126,6 +126,7 @@ Leé **[SECURITY.md](SECURITY.md)**. Resumen:
 |-----|-----------|
 | [docs/architecture.md](docs/architecture.md) | Arquitectura, niveles y flujo de aprovisionamiento |
 | [docs/issuing-certs.md](docs/issuing-certs.md) | Emitir certs (step, certbot, nginx, Traefik, cert-manager) |
+| [docs/acme-challenges.md](docs/acme-challenges.md) | Challenges ACME: http-01, dns-01, tls-alpn-01, device-attest-01 |
 | [docs/operations.md](docs/operations.md) | Backup/restore, renovación de la intermedia, logging |
 | [docs/hardening.md](docs/hardening.md) | SOPS, KMS/HSM, Root offline, políticas, CRL/OCSP |
 | [docs/observability.md](docs/observability.md) | Prometheus + Grafana |
