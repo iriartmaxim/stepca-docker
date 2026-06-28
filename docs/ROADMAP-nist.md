@@ -12,7 +12,8 @@ Estado: ⬜ pendiente · 🚧 en curso · ✅ hecho.
   step-ca sirve el CRL (DER) en `GET /crl`; se regenera al revocar (`generateOnRevoke`).
 - ✅ UI: Inventario → "Lista de revocación (CRL)": estado, vigencia, lista de seriales
   revocados y **descarga** del CRL, por CA emisora (/api/crl, /api/crl-info).
-- ⬜ Habilitar CRL también en intermedias adicionales (add/import-intermediate.sh).
+- ✅ CRL también en intermedias adicionales: add/import-intermediate.sh lo generan, y
+  las existentes (int-b/int-c) quedaron con CRL (enabled, servido en /crl).
 - ⬜ OCSP: evaluar responder (step-ca no trae OCSP nativo; opción CRL-only + doc).
 - NIST: 800-15 (repositorios), 800-57 (revocación), 800-53 SC-17.
 

@@ -60,6 +60,7 @@ cat > "${DIR}/config/ca.json" <<EOF
   "dnsNames": ["stepca-intermediate-${ID}","localhost"],
   "logger": {"format": "text"},
   "db": {"type": "postgresql", "dataSource": "${DSN}"},
+  "crl": { "enabled": true, "generateOnRevoke": true, "cacheDuration": "12h" },
   "authority": {
     "enableAdmin": true,
     "claims": { "minTLSCertDuration": "5m", "maxTLSCertDuration": "24h", "defaultTLSCertDuration": "24h" },
