@@ -110,6 +110,7 @@
       <div class="card" id="prov-manage" style="display:none">
         <h2>Agregar provisioner ACME (Admin API)</h2>
         <div class="row">
+          <div><label>Intermedia</label><select id="p-issuer"></select></div>
           <div><label>Nombre</label><input id="p-name" placeholder="acme-extra"></div>
           <div><label>Challenges (vacío = todos)</label>
             <div id="p-challs" style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px;padding-top:6px"></div></div>
@@ -290,18 +291,19 @@ async function loadCas(){
 }
 const PROTECTED=['web','ra_jwk'];
 let ADMIN=false;
-function provBadge(p, manageable){
+function provBadge(p, issuer){
   const ch=p.challenges?' · '+p.challenges.join(','):'';
-  const del=(manageable && !PROTECTED.includes(p.name))
-    ? ` <a href="#" title="eliminar" onclick="delProv('${p.name}');return false" style="color:var(--bad);text-decoration:none">×</a>` : '';
+  const del=(ADMIN && issuer && !PROTECTED.includes(p.name))
+    ? ` <a href="#" title="eliminar" onclick="delProv('${p.name}','${issuer}');return false" style="color:var(--bad);text-decoration:none">×</a>` : '';
   return `<span class="badge">${p.name} · ${p.type}${ch}${del}</span>`;
 }
 async function loadProvs(){
   const d = await j('/api/provisioners'); let h='';
-  for(const [ca,list] of Object.entries(d)){
-    const manage = ADMIN && /Intermediate/i.test(ca);
+  for(const [ca,info] of Object.entries(d)){
     h+=`<div style="margin-bottom:10px"><b>${ca}</b><br>`;
-    h+= Array.isArray(list) ? (list.length? list.map(p=>provBadge(p,manage)).join('') : '<span class="muted">— sin provisioners —</span>') : `<span class="muted">${list.error}</span>`;
+    if(info && info.error){ h+=`<span class="muted">${info.error}</span>`; }
+    else{ const list=(info&&info.provisioners)||[];
+      h+= list.length? list.map(p=>provBadge(p,info.issuer)).join('') : '<span class="muted">— sin provisioners —</span>'; }
     h+='</div>';
   }
   $('#provs').innerHTML=h;
@@ -312,17 +314,17 @@ async function addProv(){
   try{
     const r=await fetch('/api/provisioners',{method:'POST',
       headers:{'Content-Type':'application/json','X-Auth-Token':$('#p-token').value},
-      body:JSON.stringify({name:$('#p-name').value,challenges})});
+      body:JSON.stringify({name:$('#p-name').value,issuer:$('#p-issuer').value,challenges})});
     if(!r.ok){out.textContent='❌ '+(await r.text());return;}
     const d=await r.json(); out.textContent='✅ '+d.output; loadProvs();
   }catch(e){out.textContent='❌ '+e.message;}
 }
-async function delProv(name){
-  if(!confirm('¿Eliminar el provisioner '+name+'?')) return;
+async function delProv(name,issuer){
+  if(!confirm('¿Eliminar el provisioner '+name+' de '+issuer+'?')) return;
   const tok=$('#p-token').value||prompt('Token de operador:');
   if(!tok) return;
   try{
-    const r=await fetch('/api/provisioners/'+encodeURIComponent(name),{method:'DELETE',headers:{'X-Auth-Token':tok}});
+    const r=await fetch('/api/provisioners/'+encodeURIComponent(name)+'?issuer='+encodeURIComponent(issuer||'default'),{method:'DELETE',headers:{'X-Auth-Token':tok}});
     if(!r.ok){alert('❌ '+(await r.text()));return;}
     loadProvs();
   }catch(e){alert('❌ '+e.message);}
@@ -411,7 +413,8 @@ async function init(){
     fillKty('i'); fillKty('c');
   }catch(e){}
   try{const iss=await j('/api/issuers');
-    $('#i-issuer').innerHTML=iss.map(i=>`<option value="${i.id}">${i.label}</option>`).join('');
+    const opts=iss.map(i=>`<option value="${i.id}">${i.label}</option>`).join('');
+    $('#i-issuer').innerHTML=opts; $('#p-issuer').innerHTML=opts;
   }catch(e){}
   // emisión / gestión habilitada?
   let issueOn=false;

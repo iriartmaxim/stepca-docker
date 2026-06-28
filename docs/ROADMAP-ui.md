@@ -25,10 +25,11 @@ socket de Docker (manteniendo UI-sin-socket).
 - ⬜ Follow-up: endpoint de la UI para *subir* el cert/cadena firmados y stagearlos
   (la puesta en marcha sigue siendo acción de host, por el principio UI-sin-socket).
 
-### 3. Intermedias como ACME + gestión desde la UI
+### 3. Intermedias como ACME + gestión desde la UI  ✅
 - ✅ Gestión de provisioners (alta/baja ACME) vía Admin API (ya en `e99cc2c`).
-- ⬜ Sumar provisioners ACME a cualquier intermedia (incl. multi-intermediate / ADCS).
-- ⬜ Selección de emisora + estado de provisioners por CA en la UI.
+- ✅ Sumar provisioners ACME a **cualquier** intermedia (principal, multi-intermediate, ADCS):
+  add/remove por-emisora (`issuer`), usando la credencial `web` de esa CA.
+- ✅ /api/provisioners lista todas las CAs (incl. int-b/int-c); selector de intermedia en la UI.
 
 ### 4. Seccionar el apartado Estado  ✅
 - ✅ Subsecciones: CAs · Réplicas+HAProxy · PostgreSQL · Observabilidad.
@@ -54,3 +55,4 @@ socket de Docker (manteniendo UI-sin-socket).
 
 - #5 🚧 Sección Configuración (lectura): /api/settings + sección en la UI.
 - #1 🚧 Sección Operaciones (catálogo de comandos, /api/operations). Falta ejecución vía API/SQL.
+- #3 ✅ Gestión de provisioners por-emisora (cualquier intermedia, incl. ADCS).

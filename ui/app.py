@@ -332,17 +332,27 @@ def pg_status():
 @app.get("/api/provisioners")
 async def provisioners():
     out = {}
-    for ca in CAS:
+    # CAs base (Root, Intermediate principal, RA) + intermedias adicionales (issuers != default)
+    # La intermedia principal es manejable como issuer 'default'; Root/RA no son manejables aquí.
+    targets = [(ca["label"], ca["url"], "default" if ca["name"] == "stepca-intermediate" else None)
+               for ca in CAS]
+    for iid, v in ISSUERS.items():
+        if iid != "default":
+            targets.append((v["label"], v["ca_url"], iid))
+    for label, url, iid in targets:
         try:
-            j = await _get(ca["url"], "/provisioners")
-            out[ca["label"]] = [
-                {"name": p.get("name"), "type": p.get("type"),
-                 "challenges": p.get("challenges"),
-                 "attestationFormats": p.get("attestationFormats")}
-                for p in j.get("provisioners", [])
-            ]
+            j = await _get(url, "/provisioners")
+            out[label] = {
+                "issuer": iid,
+                "provisioners": [
+                    {"name": p.get("name"), "type": p.get("type"),
+                     "challenges": p.get("challenges"),
+                     "attestationFormats": p.get("attestationFormats")}
+                    for p in j.get("provisioners", [])
+                ],
+            }
         except Exception as e:
-            out[ca["label"]] = {"error": str(e)}
+            out[label] = {"error": str(e)}
     return out
 
 
@@ -488,10 +498,13 @@ PROTECTED_PROVS = {"web", "ra_jwk"}          # críticos: no se pueden borrar de
 PROV_CHALLENGES = ["http-01", "dns-01", "tls-alpn-01", "device-attest-01"]
 
 
-def _admin_args():
+def _admin_args(issuer="default"):
+    iss = ISSUERS.get(issuer)
+    if not iss or not os.path.exists(iss["pw_file"]):
+        raise HTTPException(400, "CA emisora inválida o sin credencial")
     return ["--admin-provisioner", "web", "--admin-subject", "step",
-            "--admin-password-file", WEB_PW_FILE,
-            "--ca-url", INT_CA_URL, "--root", ROOT_CRT]
+            "--admin-password-file", iss["pw_file"],
+            "--ca-url", iss["ca_url"], "--root", ROOT_CRT]
 
 
 def _require_admin(token):
@@ -503,12 +516,13 @@ def _require_admin(token):
 
 class AddProvReq(BaseModel):
     name: str
+    issuer: str = "default"      # CA intermedia sobre la que se opera
     challenges: list[str] = []   # para ACME; vacío = todos
 
 
 @app.post("/api/provisioners")
 def add_provisioner(req: AddProvReq, x_auth_token: str = Header(default="")):
-    """Agrega un provisioner ACME vía la Admin API de step-ca."""
+    """Agrega un provisioner ACME a la intermedia elegida vía la Admin API."""
     _require_admin(x_auth_token)
     name = req.name.strip()
     if not PROV_NAME_RE.match(name):
@@ -517,7 +531,7 @@ def add_provisioner(req: AddProvReq, x_auth_token: str = Header(default="")):
     cmd = ["step", "ca", "provisioner", "add", name, "--type", "ACME"]
     for c in chs:
         cmd += ["--challenge", c]
-    cmd += _admin_args()
+    cmd += _admin_args(req.issuer)
     p = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
     out = (p.stdout or "") + (p.stderr or "")
     if p.returncode != 0:
@@ -526,14 +540,14 @@ def add_provisioner(req: AddProvReq, x_auth_token: str = Header(default="")):
 
 
 @app.delete("/api/provisioners/{name}")
-def remove_provisioner(name: str, x_auth_token: str = Header(default="")):
-    """Elimina un provisioner vía la Admin API (protege web y ra_jwk)."""
+def remove_provisioner(name: str, issuer: str = "default", x_auth_token: str = Header(default="")):
+    """Elimina un provisioner de la intermedia elegida (protege web y ra_jwk)."""
     _require_admin(x_auth_token)
     if not PROV_NAME_RE.match(name):
         raise HTTPException(400, "Nombre inválido")
     if name in PROTECTED_PROVS:
         raise HTTPException(403, f"'{name}' es crítico y no puede eliminarse desde la UI")
-    cmd = ["step", "ca", "provisioner", "remove", name] + _admin_args()
+    cmd = ["step", "ca", "provisioner", "remove", name] + _admin_args(issuer)
     p = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
     out = (p.stdout or "") + (p.stderr or "")
     if p.returncode != 0:
