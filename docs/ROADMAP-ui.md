@@ -62,3 +62,4 @@ socket de Docker (manteniendo UI-sin-socket).
 - #1 ✅ Revocación de certificados desde la UI (/api/revoke, token JWK web).
 - #5 ✅ Edición de umbrales UI en runtime (/api/settings/ui).
 - ops ✅ Exportación del inventario a CSV (/api/certificates.csv).
+- fix ✅ Healthcheck de la UI + demo dns-01 (compose.acme-demo + script) tras refactor HA.

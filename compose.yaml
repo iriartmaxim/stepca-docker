@@ -262,6 +262,11 @@ services:
       - ./persistent/issued:/certs/issued
       # Credencial del provisioner 'web' (emisión segura vía API, sin socket)
       - ./persistent/ui/web_provisioner_password:/run/secrets/web_provisioner_password:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/api/config',timeout=3).status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
     deploy:
       resources:
         limits: { cpus: "0.50", memory: 256M }

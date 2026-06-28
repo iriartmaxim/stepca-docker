@@ -28,7 +28,7 @@ docker run --rm -i -v "${ZVOL}:/zones" --entrypoint sh alpine:3 \
   -c 'cat > /zones/db.test; : > /zones/records' < examples/acme/coredns/db.test
 docker compose -f compose.yaml -f compose.acme-demo.yaml up -d --force-recreate challenge-dns
 sleep 3
-docker compose -f compose.yaml -f compose.acme-demo.yaml up -d --force-recreate stepca-ra-one.local
+docker compose -f compose.yaml -f compose.acme-demo.yaml up -d --force-recreate stepca-ra-1 stepca-ra-2
 # esperar RA sana de nuevo
 for i in $(seq 1 20); do curl -sfk --max-time 3 https://localhost:9100/health >/dev/null && break; sleep 2; done
 
@@ -54,4 +54,4 @@ echo "🔍 [4/4] Cert emitido:"
 docker exec "${NAME}" sh -c 'ls -1 /.lego/certificates/ 2>/dev/null'
 docker rm -f "${NAME}" >/dev/null 2>&1 || true
 echo "✅ Demo dns-01 finalizado"
-echo "ℹ️  Para revertir la RA a su DNS normal:  docker compose up -d --force-recreate stepca-ra-one.local"
+echo "ℹ️  Para revertir la RA a su DNS normal:  docker compose up -d --force-recreate stepca-ra-1 stepca-ra-2"

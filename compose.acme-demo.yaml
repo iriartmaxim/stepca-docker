@@ -17,7 +17,15 @@ services:
       acme-demo:
         ipv4_address: 172.31.0.53
 
-  stepca-ra-one.local:
+  # Ambas réplicas de la RA usan CoreDNS como resolver (post-HA: ra-1 y ra-2,
+  # detrás del alias stepca-ra-one.local de HAProxy).
+  stepca-ra-1:
+    networks:
+      default: {}
+      acme-demo: {}
+    dns:
+      - 172.31.0.53
+  stepca-ra-2:
     networks:
       default: {}
       acme-demo: {}
