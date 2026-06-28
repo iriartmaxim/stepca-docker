@@ -56,6 +56,7 @@
     <h1>stepca · administración de la PKI</h1>
     <div class="sub">Root → Intermediate → RA (ACME) · actualiza cada 5s</div>
   </div>
+  <span id="mode" class="badge" style="margin-left:auto"></span>
 </header>
 <main>
   <div class="card">
@@ -76,14 +77,14 @@
     <div id="provs"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="card-services">
     <h2>Servicios</h2>
     <table id="services"><thead><tr>
       <th>Servicio</th><th>Estado</th><th>Imagen</th><th>Acciones</th>
     </tr></thead><tbody></tbody></table>
   </div>
 
-  <div class="card">
+  <div class="card" id="card-issue">
     <h2>Emitir certificado (ACME http-01)</h2>
     <div class="row">
       <input id="domain" placeholder="miapp.local" value="miapp.local" style="min-width:220px">
@@ -93,7 +94,7 @@
     <pre id="issueOut" style="display:none"></pre>
   </div>
 
-  <div class="card">
+  <div class="card" id="card-logs">
     <h2>Logs</h2>
     <div class="row">
       <select id="logsvc"></select>
@@ -169,8 +170,15 @@ async function loadLogs(){
   try{const r=await fetch('/api/logs/'+$('#logsvc').value+'?tail=200');out.textContent=await r.text();out.scrollTop=out.scrollHeight;}
   catch(e){out.textContent=e.message;}
 }
-function tick(){loadStatus();loadServices();}
-async function init(){tick();loadCas();loadProvs();setInterval(tick,5000);setInterval(loadProvs,15000);}
+let RO=true;
+function tick(){loadStatus();if(!RO)loadServices();}
+async function init(){
+  try{const cfg=await j('/api/config');RO=!!cfg.readonly;}catch(e){RO=true;}
+  $('#mode').textContent = RO ? '🔒 sólo lectura' : '⚙️ control habilitado';
+  if(RO){ for(const id of ['card-services','card-issue','card-logs']){const el=document.getElementById(id);if(el)el.style.display='none';} }
+  tick();loadCas();loadProvs();
+  setInterval(tick,5000);setInterval(loadProvs,15000);
+}
 init();
 </script>
 </body>

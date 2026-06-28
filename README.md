@@ -140,9 +140,18 @@ Leé **[SECURITY.md](SECURITY.md)**. Resumen:
 ```bash
 make up                                                              # desarrollo
 make prod                                                           # + límites/hardening
+make ui                                                             # UI de administración (sólo lectura) en :8088
 docker compose -f compose.yaml -f compose.ha.yaml up -d             # HA con PostgreSQL
 docker compose -f compose.yaml -f observability/compose.observability.yaml up -d  # + métricas
 ```
+
+## UI de administración
+
+Dashboard web en `http://localhost:8088` (`make ui`): estado en vivo de las 3 CAs,
+detalle de certificados, descarga de la root y provisioners ACME. Por defecto es
+**sólo lectura** (no monta el socket de Docker). El modo completo (control de
+servicios y emisión http-01) requiere `make ui-full`, que monta `/var/run/docker.sock`
+— una superficie privilegiada, usar sólo en entornos de confianza.
 
 ## Roadmap
 

@@ -63,9 +63,14 @@ restore: ## Restaura un backup: make restore FILE=backups/xxx.tar.gz
 renew: ## Renueva la intermedia si está por vencer
 	@bash scripts/renew-intermediate.sh
 
-ui: ## Levanta la UI de administración en http://localhost:8088
+ui: ## Levanta la UI (sólo lectura) en http://localhost:8088
 	@$(COMPOSE) -f compose.yaml -f compose.ui.yaml up -d --build stepca-ui
-	@echo "✅ UI en http://localhost:$(UI_PORT)"
+	@echo "✅ UI (sólo lectura) en http://localhost:$(UI_PORT)"
+
+ui-full: ## Levanta la UI con control+emisión (⚠️ monta el socket de Docker)
+	@echo "⚠️  Modo completo: la UI monta /var/run/docker.sock (superficie privilegiada)."
+	@$(COMPOSE) -f compose.yaml -f compose.ui.yaml -f compose.ui-full.yaml up -d --build stepca-ui
+	@echo "✅ UI (control+emisión) en http://localhost:$(UI_PORT)"
 
 ui-down: ## Detiene la UI de administración
 	@$(COMPOSE) -f compose.yaml -f compose.ui.yaml rm -sf stepca-ui

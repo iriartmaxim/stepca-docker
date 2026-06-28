@@ -18,6 +18,8 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, Response, FileRes
 from pydantic import BaseModel
 
 STEPCA_IMAGE = os.environ.get("STEPCA_IMAGE", "smallstep/step-ca:0.28.3")
+# Modo seguro por defecto: sin socket de Docker (sólo lectura: estado, certs, provisioners).
+READONLY = os.environ.get("UI_READONLY", "1") == "1"
 ROOT_CRT = "/certs/root/root_ca.crt"
 INT_CRT = "/certs/root/intermediate_ca.crt"
 
@@ -37,7 +39,14 @@ DOMAIN_RE = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+lo
 
 
 def dk():
+    if READONLY:
+        raise HTTPException(403, "UI en modo sólo-lectura (sin socket de Docker)")
     return docker.from_env()
+
+
+@app.get("/api/config")
+def config():
+    return {"readonly": READONLY}
 
 
 async def _get(url, path):
