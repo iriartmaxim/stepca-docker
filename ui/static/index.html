@@ -343,11 +343,12 @@ async function loadCerts(){
   $('#certs').style.display='';$('#certempty').style.display='none';
   tb.innerHTML = d.certificates.map(c=>{
     const sans=c.sans.length?`<div class="muted" style="font-size:11px">${c.sans.join(', ')}</div>`:'';
+    const dl=c.file?` <a href="/api/cert-file?file=${encodeURIComponent(c.file)}" title="descargar">⬇</a>`:'';
     return `<tr><td><b>${c.common_name||'—'}</b>${sans}</td>
       <td><span class="pill ${c.status}">${STLABEL[c.status]||c.status}</span></td>
       <td>${c.expires_in}<div class="muted" style="font-size:11px">${c.not_after.slice(0,16).replace('T',' ')}</div></td>
       <td class="muted">${c.not_before.slice(0,16).replace('T',' ')}</td>
-      <td class="muted">${c.key_type}</td><td><code>${c.serial.slice(0,16)}…</code></td></tr>`;
+      <td class="muted">${c.key_type}</td><td><code>${c.serial.slice(0,16)}…</code>${dl}</td></tr>`;
   }).join('');
 }
 

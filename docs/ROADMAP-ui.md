@@ -56,3 +56,4 @@ socket de Docker (manteniendo UI-sin-socket).
 - #5 🚧 Sección Configuración (lectura): /api/settings + sección en la UI.
 - #1 🚧 Sección Operaciones (catálogo de comandos, /api/operations). Falta ejecución vía API/SQL.
 - #3 ✅ Gestión de provisioners por-emisora (cualquier intermedia, incl. ADCS).
+- ops ✅ Descarga de certificados del inventario (/api/cert-file, validado).

@@ -195,6 +195,17 @@ def certificates():
     return {"summary": summary, "certificates": out}
 
 
+@app.get("/api/cert-file")
+def cert_file(file: str):
+    """Descarga un certificado emitido del inventario (valida el nombre)."""
+    if not re.match(r"^[A-Za-z0-9._-]+\.(crt|pem)$", file):
+        raise HTTPException(400, "nombre inválido")
+    path = os.path.join(ISSUED_DIR, file)
+    if not os.path.isfile(path):
+        raise HTTPException(404, "no encontrado")
+    return FileResponse(path, media_type="application/x-pem-file", filename=file)
+
+
 @app.get("/api/root.crt")
 def root_crt():
     if not os.path.exists(ROOT_CRT):
