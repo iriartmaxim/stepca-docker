@@ -45,6 +45,10 @@
   input,select{background:#0d1117;border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:13px;width:100%}
   .row{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
   .row>div{flex:1;min-width:160px}
+  .tip{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;margin-left:5px;
+    border-radius:50%;background:#21262d;border:1px solid var(--border);color:var(--muted);
+    font-size:10px;cursor:help;vertical-align:middle;font-weight:700}
+  .tip:hover{background:var(--accent);color:#fff}
   pre{background:#0d1117;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;max-height:340px;font-size:12px;margin:12px 0 0}
   .badge{display:inline-block;background:#1f2937;border:1px solid var(--border);border-radius:20px;padding:1px 9px;font-size:11px;margin:2px 3px 0 0;color:#c9d1d9}
   .pill{padding:1px 8px;border-radius:20px;font-size:11px}
@@ -137,17 +141,19 @@
         </div>
         <div id="issue-form">
           <div class="row">
-            <div><label>CA emisora</label><select id="i-issuer"></select></div>
-            <div><label>Nombre (CN) · *.local</label><input id="i-domain" value="miapp.local"></div>
-            <div><label>Perfil de uso</label><select id="i-profile"></select></div>
+            <div><label>CA emisora<span class="tip" title="Intermedia que firma el certificado. Si tenés varias (multi-intermediate/ADCS), elegí cuál emite.">?</span></label><select id="i-issuer"></select></div>
+            <div><label>Nombre (CN) · *.local<span class="tip" title="Common Name: el hostname principal del certificado. En este lab se restringe a *.local por la política del provisioner.">?</span></label><input id="i-domain" value="miapp.local"></div>
+            <div><label>Perfil de uso (template)<span class="tip" title="Plantilla de emisión: define el uso (EKU/KeyUsage) y autocompleta tipo de clave y validez recomendados. Podés ajustarlos después.">?</span></label><select id="i-profile" onchange="applyProfile()"></select></div>
+          </div>
+          <div id="profile-desc" class="muted" style="font-size:12px;margin:-6px 0 10px"></div>
+          <div class="row">
+            <div><label>Tipo de clave<span class="tip" title="Algoritmo de la clave privada. EC (curvas elípticas) es más liviano/rápido; RSA tiene mayor compatibilidad con sistemas viejos.">?</span></label><select id="i-kty" onchange="syncKey('i')"></select></div>
+            <div><label>Curva / tamaño<span class="tip" title="EC: curva (P-256 alcanza para casi todo). RSA: tamaño en bits (≥2048; 3072/4096 más fuerte y más lento).">?</span></label><select id="i-kparam"></select></div>
+            <div><label>Validez<span class="tip" title="Duración del certificado (ej.: 12h, 24h). Vacío usa el default del provisioner. El máximo lo limita maxTLSCertDuration (claims).">?</span></label><input id="i-notafter" placeholder="ej.: 24h (vacío = default)"></div>
           </div>
           <div class="row">
-            <div><label>Tipo de clave</label><select id="i-kty" onchange="syncKey('i')"></select></div>
-            <div><label>Curva / tamaño</label><select id="i-kparam"></select></div>
-            <div><label>SANs adicionales (coma)</label><input id="i-sans" placeholder="alt1.local, alt2.local"></div>
-          </div>
-          <div class="row">
-            <div><label>Token de operador</label><input id="i-token" type="password" placeholder="UI_TOKEN" onblur="checkRole(this.value)"></div>
+            <div><label>SANs adicionales (coma)<span class="tip" title="Subject Alternative Names extra (otros hostnames *.local que también validará el certificado). Separá con comas.">?</span></label><input id="i-sans" placeholder="alt1.local, alt2.local"></div>
+            <div><label>Token de operador<span class="tip" title="Token de rol operator o admin (UI_TOKEN). Autoriza la emisión sin exponer el socket de Docker.">?</span></label><input id="i-token" type="password" placeholder="UI_TOKEN" onblur="checkRole(this.value)"></div>
             <div style="flex:0"><label>&nbsp;</label><button class="primary" onclick="issue()">Emitir</button></div>
             <div style="flex:0"><label>&nbsp;</label><span id="role-badge" class="muted" style="font-size:12px"></span></div>
           </div>
@@ -630,6 +636,15 @@ function renderCerts(){
   }).join('');
 }
 
+// ── perfiles (templates) que autocompletan ──
+let PROFILES_DATA={};
+function applyProfile(){
+  const p=PROFILES_DATA[$('#i-profile').value]; if(!p) return;
+  if(p.key_type){ $('#i-kty').value=p.key_type; syncKey('i'); }
+  if(p.key_param) $('#i-kparam').value=p.key_param;
+  if(p.duration) $('#i-notafter').value=p.duration;
+  $('#profile-desc').textContent=p.desc||'';
+}
 // ── opciones de clave ──
 let KEYTYPES={};
 function fillKty(prefix){
@@ -649,7 +664,7 @@ async function issue(){
     const r=await fetch('/api/issue',{method:'POST',
       headers:{'Content-Type':'application/json','X-Auth-Token':$('#i-token').value},
       body:JSON.stringify({domain:$('#i-domain').value,issuer:$('#i-issuer').value,profile:$('#i-profile').value,
-        key_type:$('#i-kty').value,key_param:$('#i-kparam').value,sans})});
+        key_type:$('#i-kty').value,key_param:$('#i-kparam').value,not_after:$('#i-notafter').value,sans})});
     if(!r.ok){out.textContent='❌ '+(await r.text());return;}
     const d=await r.json();
     out.textContent=(d.ok?'✅ Certificado emitido\n\n':'⚠️ Revisar salida\n\n')+d.output;
@@ -687,9 +702,9 @@ function dl(kind){
 async function init(){
   // perfiles, tipos de clave y CAs emisoras
   try{const pf=await j('/api/profiles');
-    KEYTYPES=pf.key_types;
-    $('#i-profile').innerHTML=Object.entries(pf.profiles).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
-    fillKty('i'); fillKty('c');
+    KEYTYPES=pf.key_types; PROFILES_DATA=pf.profiles;
+    $('#i-profile').innerHTML=Object.entries(pf.profiles).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('');
+    fillKty('i'); fillKty('c'); applyProfile();
   }catch(e){}
   try{const iss=await j('/api/issuers');
     const opts=iss.map(i=>`<option value="${i.id}">${i.label}</option>`).join('');

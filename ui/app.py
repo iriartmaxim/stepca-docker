@@ -712,13 +712,24 @@ async def provisioners():
     return out
 
 
-# Perfiles de uso (mapeados a KeyUsage/EKU por la plantilla web-leaf.tpl)
+# Perfiles de uso = "templates" (mapeados a KeyUsage/EKU por web-leaf.tpl). Cada uno trae
+# defaults que la UI usa para autocompletar el formulario al elegirlo.
 PROFILES = {
-    "tls-server":   "Servidor TLS (serverAuth)",
-    "tls-client":   "Cliente TLS (clientAuth)",
-    "mtls":         "mTLS (serverAuth + clientAuth)",
-    "code-signing": "Firma de código (codeSigning)",
-    "email":        "S/MIME / Email (emailProtection)",
+    "tls-server":   {"label": "Servidor TLS (serverAuth)",
+                     "desc": "Sitios/servicios HTTPS. EKU serverAuth. EC P-256 alcanza.",
+                     "key_type": "EC", "key_param": "P-256", "duration": "24h"},
+    "tls-client":   {"label": "Cliente TLS (clientAuth)",
+                     "desc": "Autenticar un cliente/usuario/dispositivo (lado cliente de mTLS). EKU clientAuth.",
+                     "key_type": "EC", "key_param": "P-256", "duration": "24h"},
+    "mtls":         {"label": "mTLS (serverAuth + clientAuth)",
+                     "desc": "Servicio que es servidor y cliente a la vez. Ambos EKU.",
+                     "key_type": "EC", "key_param": "P-256", "duration": "24h"},
+    "code-signing": {"label": "Firma de código (codeSigning)",
+                     "desc": "Firmar binarios/artefactos. EKU codeSigning. RSA recomendado por compatibilidad.",
+                     "key_type": "RSA", "key_param": "3072", "duration": "24h"},
+    "email":        {"label": "S/MIME / Email (emailProtection)",
+                     "desc": "Firmar/cifrar correo. EKU emailProtection.",
+                     "key_type": "RSA", "key_param": "2048", "duration": "24h"},
 }
 KEY_TYPES = {"EC": ["P-256", "P-384", "P-521"], "RSA": ["2048", "3072", "4096"]}
 HOST_RE = re.compile(r"^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$")
@@ -736,6 +747,7 @@ class IssueReq(BaseModel):
     key_type: str = "EC"
     key_param: str = "P-256"   # curva (EC) o tamaño (RSA)
     sans: list[str] = []       # SANs adicionales (*.local)
+    not_after: str = ""        # validez opcional (ej.: 12h, 24h); cap por claims
 
 
 def _key_flags(key_type, key_param):
@@ -779,6 +791,11 @@ def issue(req: IssueReq, x_auth_token: str = Header(default="")):
         cmd += _key_flags(req.key_type, req.key_param)
         for s in sans:
             cmd += ["--san", s]
+        na = req.not_after.strip()
+        if na:
+            if not DUR_RE.match(na):
+                raise HTTPException(400, "Validez inválida (ej.: 12h, 24h, 30m)")
+            cmd += ["--not-after", na]
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         ok = p.returncode == 0 and os.path.exists(crt)
         out = (p.stdout or "") + (p.stderr or "")

@@ -2,8 +2,8 @@
 
 Estado: ⬜ pendiente · 🚧 en curso · ✅ hecho. Cada avance: commit en main-clean + rebuild UI + smoke.
 
-1. ⬜ **Emitir**: todas las opciones posibles, cada una con un (?) que explique qué es y para
-   qué sirve. Perfiles de uso = **templates**; al elegir un template, autocompletar campos.
+1. ✅ **Emitir**: (?) por campo + perfiles como templates que autocompletan + opción Validez.
+
 2. ⬜ **Generar CSR**: ídem (opciones + (?) + templates que autocompletan).
 3. ✅ **Inventario**: detalle en modal (siempre visible) + paginación 10/página.
    inline junto a la fila + scroll a él); **paginar 10 por página**.
@@ -25,3 +25,4 @@ Estado: ⬜ pendiente · 🚧 en curso · ✅ hecho. Cada avance: commit en main
 - #4 ✅ Operaciones eliminado (nav/sección/JS/endpoints).
 - #6+#7 ✅ Estado por rol (Roots/Intermedias/RAs) y CAs en dos cajas; /api/status y /api/cas devuelven role.
 - #3 ✅ Inventario: detalle en modal + paginación 10/pág (Anterior/Siguiente, Esc/backdrop cierran).
+- #1 ✅ Emitir: tooltips (?), perfiles=templates con autocompletado, validez (not_after).
