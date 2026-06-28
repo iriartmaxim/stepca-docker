@@ -1,0 +1,13 @@
+# Normalización de fines de línea.
+# Los scripts shell DEBEN ser LF: se ejecutan en contenedores Linux y el CRLF
+# rompe el shebang (#!/usr/bin/env bash\r -> "can't execute bash").
+* text=auto eol=lf
+*.sh   text eol=lf
+*.yaml text eol=lf
+*.yml  text eol=lf
+Makefile text eol=lf
+
+# Binarios y certificados: sin conversión
+*.crt binary
+*.pem binary
+*.key binary
