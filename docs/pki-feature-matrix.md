@@ -17,7 +17,7 @@ Leyenda: ✅ tiene · 🟡 parcial · ⬜ falta · ★ priorizado para implement
 | 3 | **Monitoreo de vencimientos** (buckets, % por estado) | todos | 🟡 (pills) | ★ B1 |
 | 4 | **Alertas/notificaciones** de expiración (webhook/email) | Keyfactor, Venafi | ⬜ | ★ B2 |
 | 5 | Reporting/compliance export | todos | ✅ CSV | 🟡 ampliar |
-| 6 | **RBAC / roles** | EJBCA, Keyfactor, Venafi | ⬜ (1 token) | ★ B3 (roles viewer/operator/admin) |
+| 6 | **RBAC / roles** | EJBCA, Keyfactor, Venafi | ✅ viewer/operator/admin | — |
 | 7 | Motor de políticas (allow/deny, name constraints) | Venafi, EJBCA | 🟡 policy.x509 | ★ A3 (editor en UI) |
 | 8 | ACME | step-ca, Vault, EJBCA | ✅ 4 challenges | — |
 | 9 | **ACME EAB** (External Account Binding) | Smallstep, EJBCA | ⬜ | ★ B4 |

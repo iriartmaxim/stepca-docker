@@ -27,6 +27,9 @@ CRIT_H = float(os.environ.get("CERT_CRIT_H", "2"))   # "crítico" si quedan < N 
 # Emisión segura (sin socket): provisioner JWK 'web' + token de operador.
 WEB_PW_FILE = os.environ.get("WEB_PROVISIONER_PW_FILE", "/run/secrets/web_provisioner_password")
 UI_TOKEN = os.environ.get("UI_TOKEN", "")
+UI_OPERATOR_TOKEN = os.environ.get("UI_OPERATOR_TOKEN", "")
+UI_VIEWER_TOKEN = os.environ.get("UI_VIEWER_TOKEN", "")
+ROLE_RANK = {"viewer": 1, "operator": 2, "admin": 3}
 INT_CA_URL = os.environ.get("INT_CA_URL", "https://stepca-intermediate:9000")
 
 # Registro de CAs emisoras (multi-intermediate). 'default' = la intermedia principal.
@@ -596,10 +599,7 @@ def _key_flags(key_type, key_param):
 def issue(req: IssueReq, x_auth_token: str = Header(default="")):
     """Emite un certificado vía la API autenticada de step-ca (provisioner JWK
     'web'), SIN socket. Soporta perfil de uso y tipo de clave. Requiere token."""
-    if not issue_enabled():
-        raise HTTPException(403, "Emisión deshabilitada (faltan UI_TOKEN o el secreto del provisioner web)")
-    if x_auth_token != UI_TOKEN:
-        raise HTTPException(401, "Token de operador inválido")
+    _require_role(x_auth_token, "operator")
     domain = req.domain.strip().lower()
     if not DOMAIN_RE.match(domain):
         raise HTTPException(400, "Nombre inválido: se permite sólo un hostname *.local")
@@ -702,11 +702,35 @@ def _admin_args(issuer="default"):
             "--ca-url", iss["ca_url"], "--root", ROOT_CRT]
 
 
-def _require_admin(token):
+def _role(token):
+    """Resuelve el rol RBAC de un token: admin > operator > viewer (None si inválido)."""
+    if token and token == UI_TOKEN:
+        return "admin"
+    if token and UI_OPERATOR_TOKEN and token == UI_OPERATOR_TOKEN:
+        return "operator"
+    if token and UI_VIEWER_TOKEN and token == UI_VIEWER_TOKEN:
+        return "viewer"
+    return None
+
+
+def _require_role(token, need):
     if not issue_enabled():
         raise HTTPException(403, "Gestión deshabilitada (faltan UI_TOKEN o el secreto del provisioner web)")
-    if token != UI_TOKEN:
-        raise HTTPException(401, "Token de operador inválido")
+    r = _role(token)
+    if not r or ROLE_RANK[r] < ROLE_RANK[need]:
+        raise HTTPException(401, f"Requiere rol '{need}' (token inválido o insuficiente)")
+    return r
+
+
+def _require_admin(token):
+    _require_role(token, "admin")
+
+
+@app.get("/api/whoami")
+def whoami(x_auth_token: str = Header(default="")):
+    """Rol RBAC del token presentado (para que la UI adapte los controles)."""
+    return {"role": _role(x_auth_token),
+            "rbac": bool(UI_OPERATOR_TOKEN or UI_VIEWER_TOKEN)}
 
 
 class AddProvReq(BaseModel):
@@ -742,7 +766,7 @@ class RevokeReq(BaseModel):
 @app.post("/api/revoke")
 def revoke(req: RevokeReq, x_auth_token: str = Header(default="")):
     """Revoca un certificado del inventario (revocación pasiva vía token JWK 'web')."""
-    _require_admin(x_auth_token)
+    _require_role(x_auth_token, "operator")
     iss = ISSUERS.get(req.issuer)
     if not iss or not os.path.exists(iss["pw_file"]):
         raise HTTPException(400, "CA emisora inválida")

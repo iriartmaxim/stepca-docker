@@ -54,3 +54,4 @@ notificaciones, reporting/compliance, API keys, multi-tenant, métricas.)
 - B1 ✅ Inventario: búsqueda/filtrado + chips de estado clickeables.
 - A4 ✅ Sección Auditoría (emisiones+revocaciones, /api/audit + CSV).
 - A2 ✅ (panel) Custodia de claves en la UI (/api/key-custody, avisos NIST).
+- B3 ✅ RBAC: roles viewer/operator/admin (tokens + /api/whoami, gating por endpoint).

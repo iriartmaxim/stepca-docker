@@ -142,8 +142,9 @@
             <div><label>SANs adicionales (coma)</label><input id="i-sans" placeholder="alt1.local, alt2.local"></div>
           </div>
           <div class="row">
-            <div><label>Token de operador</label><input id="i-token" type="password" placeholder="UI_TOKEN"></div>
+            <div><label>Token de operador</label><input id="i-token" type="password" placeholder="UI_TOKEN" onblur="checkRole(this.value)"></div>
             <div style="flex:0"><label>&nbsp;</label><button class="primary" onclick="issue()">Emitir</button></div>
+            <div style="flex:0"><label>&nbsp;</label><span id="role-badge" class="muted" style="font-size:12px"></span></div>
           </div>
           <pre id="issueOut" style="display:none"></pre>
         </div>
@@ -304,6 +305,16 @@ async function loadSettings(){
     $('#cfg-infra').innerHTML=`<table>${kv({'PostgreSQL hosts':u.pg_hosts.join(', '),'PG user':u.pg_user,'HAProxy stats':u.haproxy_stats})}</table>`;
   }catch(e){ $('#cfg-ui').innerHTML='<span class="muted">'+e.message+'</span>'; }
   loadKeyCustody();
+}
+const ROLEBADGE={admin:['admin','var(--ok)'],operator:['operator','var(--warn)'],viewer:['viewer','#8b949e']};
+async function checkRole(tok){
+  const el=$('#role-badge'); if(!tok){ el.textContent=''; return; }
+  try{
+    const d=await j('/api/whoami',{headers:{'X-Auth-Token':tok}});
+    if(!d.role){ el.innerHTML='<span class="pill critical">token inválido</span>'; return; }
+    const b=ROLEBADGE[d.role]||[d.role,'inherit'];
+    el.innerHTML=`rol: <span class="pill" style="background:${b[1]};color:#0d1117">${b[0]}</span>`;
+  }catch(e){ el.textContent=''; }
 }
 async function loadKeyCustody(){
   try{

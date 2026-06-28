@@ -248,8 +248,14 @@ services:
     container_name: stepca-ui
     restart: unless-stopped
     environment:
-      # Token de operador: si está vacío, la emisión queda DESHABILITADA (sólo lectura).
+      # RBAC (NIST 800-53, separación de funciones). El token 'admin' habilita todo.
+      # Si está vacío, la gestión queda DESHABILITADA (sólo lectura).
+      #   admin    -> todo (provisioners, settings, intermedias)
+      #   operator -> emitir + revocar certificados
+      #   viewer   -> sólo lectura (si se define, sirve para identificar al rol)
       UI_TOKEN: ${UI_TOKEN:-}
+      UI_OPERATOR_TOKEN: ${UI_OPERATOR_TOKEN:-}
+      UI_VIEWER_TOKEN: ${UI_VIEWER_TOKEN:-}
       # Credenciales de sólo lectura para el estado de replicación PostgreSQL
       PG_USER: ${PG_USER:-stepca}
       PG_PASSWORD: ${PG_PASSWORD:-stepca-change-me}
