@@ -62,3 +62,4 @@ notificaciones, reporting/compliance, API keys, multi-tenant, métricas.)
 - A5/cfg ✅ Edición de claims de duración por provisioner (/api/provisioner-claims).
 - compliance ✅ Dashboard de Cumplimiento NIST en vivo (/api/compliance, sección UI).
 - A3 ✅ (doc) CP/CPS RFC 3647 (docs/CP-CPS.md) visible en la UI (/api/cp-cps).
+- ops ✅ Smoke/health EJECUTABLE desde la UI (/api/operations/run/smoke, operator+).

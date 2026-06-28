@@ -326,12 +326,28 @@ async function loadOps(){
     const d=await j('/api/operations'); const cats={};
     d.operations.forEach(o=>{(cats[o.cat]=cats[o.cat]||[]).push(o);});
     $('#ops').innerHTML=Object.entries(cats).map(([cat,list])=>`<div style="margin-bottom:14px"><b>${cat}</b>`+
-      list.map(o=>`<div style="display:flex;gap:8px;align-items:center;margin:6px 0">
-        <button class="ghost" onclick="cp('${o.cmd.replace(/'/g,"\\'")}')">copiar</button>
-        <code style="flex:1">${o.cmd}</code></div>
-        <div class="muted" style="font-size:11px;margin:-2px 0 6px 64px">${o.desc}</div>`).join('')+
+      list.map(o=>{
+        const run=(o.kind==='api'&&o.id)
+          ? `<button class="primary" onclick="runOp('${o.id}')">▶ Ejecutar</button>`
+          : `<button class="ghost" onclick="cp('${o.cmd.replace(/'/g,"\\'")}')">copiar</button>`;
+        const tag=o.kind==='api'?'<span class="pill ok" style="font-size:10px">UI</span>':'<span class="pill" style="font-size:10px">host</span>';
+        return `<div style="display:flex;gap:8px;align-items:center;margin:6px 0">
+          ${run}<code style="flex:1">${o.cmd}</code>${tag}</div>
+          <div class="muted" style="font-size:11px;margin:-2px 0 6px 64px">${o.desc}</div>
+          ${o.id?`<pre id="op-out-${o.id}" style="display:none;margin:0 0 8px 64px"></pre>`:''}`;
+      }).join('')+
       `</div>`).join('');
   }catch(e){ $('#ops').innerHTML='<span class="muted">'+e.message+'</span>'; }
+}
+async function runOp(id){
+  const out=$('#op-out-'+id); out.style.display='block'; out.textContent='Ejecutando…';
+  const tok=$('#i-token').value||prompt('Token (operator+):'); if(!tok){ out.textContent=''; return; }
+  try{
+    const r=await fetch('/api/operations/run/'+id,{method:'POST',headers:{'X-Auth-Token':tok}});
+    if(!r.ok){ out.textContent='❌ '+(await r.text()); return; }
+    const d=await r.json();
+    out.textContent=(d.ok?'✅ OK\n':'⚠️ con fallos\n')+d.output;
+  }catch(e){ out.textContent='❌ '+e.message; }
 }
 async function loadSettings(){
   try{
