@@ -55,3 +55,4 @@ notificaciones, reporting/compliance, API keys, multi-tenant, métricas.)
 - A4 ✅ Sección Auditoría (emisiones+revocaciones, /api/audit + CSV).
 - A2 ✅ (panel) Custodia de claves en la UI (/api/key-custody, avisos NIST).
 - B3 ✅ RBAC: roles viewer/operator/admin (tokens + /api/whoami, gating por endpoint).
+- B5 ✅ Revocación masiva de los certs filtrados (/api/revoke-bulk, operator+).

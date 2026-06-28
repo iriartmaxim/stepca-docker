@@ -203,7 +203,9 @@
             <option value="warning">por vencer</option><option value="critical">críticos</option>
             <option value="expired">vencidos</option></select></div>
           <div style="flex:0"><label>&nbsp;</label><span id="cert-count" class="muted" style="font-size:12px"></span></div>
+          <div style="flex:0" id="bulk-wrap"><label>&nbsp;</label><button class="ghost" style="color:var(--bad)" onclick="bulkRevoke()">🚫 Revocar filtrados</button></div>
         </div>
+        <div id="bulk-out" class="muted" style="font-size:12px;margin-bottom:8px;display:none"></div>
         <table id="certs"><thead><tr>
           <th>Common Name / SANs</th><th>Estado</th><th>Vence en</th><th>Emitido</th><th>Tipo</th><th>Serial</th>
         </tr></thead><tbody></tbody></table>
@@ -474,8 +476,25 @@ async function certDetail(file){
       'SHA-256     : '+c.fingerprint;
   }catch(e){ out.textContent='❌ '+e.message; }
 }
-let ALLCERTS=[];
+let ALLCERTS=[], FILTERED=[];
 function setCertFilter(st){ $('#cert-filter').value=st; renderCerts(); }
+async function bulkRevoke(){
+  const files=FILTERED.filter(c=>c.file).map(c=>c.file);
+  if(!files.length){ alert('No hay certificados (con archivo) en el filtro actual.'); return; }
+  if(!confirm(`¿Revocar ${files.length} certificado(s) filtrado(s)? Esta acción no se puede deshacer.`)) return;
+  if(prompt(`Para confirmar, escribí REVOCAR (${files.length} certs):`)!=='REVOCAR') return;
+  const tok=$('#i-token').value||prompt('Token de operador:'); if(!tok) return;
+  const out=$('#bulk-out'); out.style.display='block'; out.textContent=`Revocando ${files.length}…`;
+  try{
+    const r=await fetch('/api/revoke-bulk',{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':tok},
+      body:JSON.stringify({files,issuer:'default'})});
+    if(!r.ok){ out.textContent='❌ '+(await r.text()); return; }
+    const d=await r.json();
+    out.textContent=`✅ Revocados: ${d.revoked} · fallidos: ${d.failed}`+
+      (d.failed?(' — '+d.results.filter(x=>!x.ok).slice(0,3).map(x=>x.file+': '+x.error).join(' | ')):'');
+    loadCerts();
+  }catch(e){ out.textContent='❌ '+e.message; }
+}
 async function loadCerts(){
   const d = await j('/api/certificates'); const s=d.summary; ALLCERTS=d.certificates;
   const chip=(st,col,lbl,n)=>`<span class="chip" onclick="setCertFilter('${st}')" style="cursor:pointer;color:${col}"><b>${n}</b> ${lbl}</span>`;
@@ -497,7 +516,9 @@ function renderCerts(){
       || (c.sans||[]).some(s=>s.toLowerCase().includes(q))
       || (c.serial||'').toLowerCase().includes(q);
   });
+  FILTERED=rows;
   $('#cert-count').textContent=`${rows.length} de ${ALLCERTS.length}`;
+  $('#bulk-wrap').style.display=ADMIN?'':'none';
   const tb=$('#certs tbody');
   if(!ALLCERTS.length){tb.innerHTML='';$('#certs').style.display='none';$('#certempty').style.display='block';return;}
   $('#certs').style.display='';$('#certempty').style.display='none';

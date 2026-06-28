@@ -23,7 +23,7 @@ Leyenda: ✅ tiene · 🟡 parcial · ⬜ falta · ★ priorizado para implement
 | 9 | **ACME EAB** (External Account Binding) | Smallstep, EJBCA | ⬜ | ★ B4 |
 | 10 | SCEP / EST / CMP | EJBCA (todos), Smallstep (SCEP/EST) | ⬜ (device via ACME) | ⬜ evaluar |
 | 11 | **Plantillas/perfiles** de emisión gestionables | EJBCA (cert profiles), ADCS | 🟡 archivos .tpl | ★ A5 (ver/seleccionar en UI) |
-| 12 | **Operaciones masivas** (bulk revoke/export) | Keyfactor, Venafi | ⬜ | ★ B5 |
+| 12 | **Operaciones masivas** (bulk revoke/export) | Keyfactor, Venafi | ✅ bulk revoke + CSV | — |
 | 13 | **Audit log / trazabilidad** | todos | ✅ vista Auditoría + CSV | — |
 | 14 | Gestión de claves / HSM | EJBCA, todos | ✅ panel de custodia | 🟡 PKCS#11 opt-in |
 | 15 | Multi-CA / multi-issuer | EJBCA, Keyfactor | ✅ multi-intermediate | — |

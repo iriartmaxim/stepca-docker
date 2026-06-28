@@ -763,14 +763,12 @@ class RevokeReq(BaseModel):
     issuer: str = "default"
 
 
-@app.post("/api/revoke")
-def revoke(req: RevokeReq, x_auth_token: str = Header(default="")):
-    """Revoca un certificado del inventario (revocación pasiva vía token JWK 'web')."""
-    _require_role(x_auth_token, "operator")
-    iss = ISSUERS.get(req.issuer)
+def _revoke_file(file, issuer):
+    """Revoca un cert del inventario por su archivo. Devuelve (serial). Lanza HTTPException."""
+    iss = ISSUERS.get(issuer)
     if not iss or not os.path.exists(iss["pw_file"]):
         raise HTTPException(400, "CA emisora inválida")
-    path = _safe_issued(req.file)
+    path = _safe_issued(file)
     with open(path, "rb") as f:
         serial = str(x509.load_pem_x509_certificate(f.read()).serial_number)
     base = ["--ca-url", iss["ca_url"], "--root", ROOT_CRT]
@@ -784,7 +782,40 @@ def revoke(req: RevokeReq, x_auth_token: str = Header(default="")):
     out = (p.stdout or "") + (p.stderr or "")
     if p.returncode != 0:
         raise HTTPException(400, "Error: " + out.strip())
-    return {"ok": True, "serial": serial, "output": out.strip()}
+    return serial, out.strip()
+
+
+@app.post("/api/revoke")
+def revoke(req: RevokeReq, x_auth_token: str = Header(default="")):
+    """Revoca un certificado del inventario (revocación pasiva vía token JWK 'web')."""
+    _require_role(x_auth_token, "operator")
+    serial, out = _revoke_file(req.file, req.issuer)
+    return {"ok": True, "serial": serial, "output": out}
+
+
+class RevokeBulkReq(BaseModel):
+    files: list[str]
+    issuer: str = "default"
+
+
+@app.post("/api/revoke-bulk")
+def revoke_bulk(req: RevokeBulkReq, x_auth_token: str = Header(default="")):
+    """Revoca varios certificados de una (operación masiva). Reporta por archivo."""
+    _require_role(x_auth_token, "operator")
+    if not req.files:
+        raise HTTPException(400, "Sin certificados para revocar")
+    if len(req.files) > 200:
+        raise HTTPException(400, "Demasiados certificados (máx. 200 por lote)")
+    results, ok, failed = [], 0, 0
+    for f in req.files:
+        try:
+            serial, _ = _revoke_file(f, req.issuer)
+            results.append({"file": f, "ok": True, "serial": format(int(serial), "x")})
+            ok += 1
+        except HTTPException as e:
+            results.append({"file": f, "ok": False, "error": str(e.detail)[:120]})
+            failed += 1
+    return {"revoked": ok, "failed": failed, "results": results}
 
 
 def _fetch_crl(issuer):
