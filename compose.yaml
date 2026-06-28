@@ -250,6 +250,9 @@ services:
     environment:
       # Token de operador: si está vacío, la emisión queda DESHABILITADA (sólo lectura).
       UI_TOKEN: ${UI_TOKEN:-}
+      # Credenciales de sólo lectura para el estado de replicación PostgreSQL
+      PG_USER: ${PG_USER:-stepca}
+      PG_PASSWORD: ${PG_PASSWORD:-stepca-change-me}
     ports:
       - "${UI_PORT:-8088}:8080"
     volumes:

@@ -78,7 +78,20 @@
   <main>
     <!-- ESTADO -->
     <section id="sec-estado" class="active">
-      <div class="card"><h2>Estado de las CAs</h2><div id="status" class="grid"></div></div>
+      <div class="card"><h2>CAs</h2><div id="status" class="grid"></div></div>
+      <div class="card"><h2>Réplicas · balanceador (HAProxy)</h2>
+        <table id="hap"><thead><tr><th>Backend</th><th>Servidor</th><th>Estado</th></tr></thead><tbody></tbody></table>
+        <div id="hap-msg" class="muted" style="font-size:12px"></div>
+        <div style="margin-top:8px"><a href="http://localhost:8404/" target="_blank"><button class="ghost">Panel HAProxy ↗</button></a></div>
+      </div>
+      <div class="card"><h2>PostgreSQL · replicación</h2><div id="pg" class="grid"></div></div>
+      <div class="card"><h2>Observabilidad</h2>
+        <div class="row">
+          <a href="http://localhost:3000/" target="_blank"><button class="ghost">Grafana ↗</button></a>
+          <a href="http://localhost:9090/" target="_blank"><button class="ghost">Prometheus ↗</button></a>
+          <a href="http://localhost:9090/targets" target="_blank"><button class="ghost">Targets ↗</button></a>
+        </div>
+      </div>
     </section>
 
     <!-- CAs -->
@@ -187,6 +200,28 @@ async function loadStatus(){
   $('#status').innerHTML = d.map(c=>`<div class="ca"><div class="name"><span class="dot ${c.healthy?'ok':'bad'}"></span>${c.label}</div>
     <div class="meta">${c.name}<br>puerto host :${c.host_port} · ${c.healthy?'healthy':'caído'}</div></div>`).join('');
   $('#overall').className='dot '+(d.every(c=>c.healthy)?'ok':(d.some(c=>c.healthy)?'warn':'bad'));
+}
+async function loadHaproxy(){
+  try{
+    const d=await j('/api/haproxy'); const tb=$('#hap tbody'); $('#hap-msg').textContent='';
+    if(!d.ok){ tb.innerHTML=''; $('#hap-msg').textContent='HAProxy no accesible: '+(d.error||''); return; }
+    tb.innerHTML=d.servers.map(s=>{
+      const up=/up/i.test(s.status);
+      return `<tr><td>${s.backend}</td><td>${s.server}</td><td><span class="pill ${up?'ok':'expired'}">${s.status}</span></td></tr>`;
+    }).join('')||'<tr><td colspan=3 class="muted">sin backends</td></tr>';
+  }catch(e){ $('#hap-msg').textContent=e.message; }
+}
+async function loadPg(){
+  try{
+    const d=await j('/api/pg-status');
+    $('#pg').innerHTML=d.map(n=>{
+      if(!n.reachable) return `<div class="ca"><div class="name"><span class="dot bad"></span>${n.host}</div><div class="meta">${n.error||'no accesible'}</div></div>`;
+      const reps=(n.replicas||[]).map(r=>`${r.app}: ${r.state}${r.sync?' ('+r.sync+')':''}`).join('<br>')||'<span class="muted">—</span>';
+      const role=n.role==='primary'?'<span class="pill ok">PRIMARIO</span>':'<span class="pill warning">standby</span>';
+      return `<div class="ca"><div class="name"><span class="dot ok"></span>${n.host} ${role}</div>
+        <div class="meta">${n.role==='primary'?'Réplicas conectadas:':'Recepción WAL:'}<br>${reps}</div></div>`;
+    }).join('');
+  }catch(e){ $('#pg').innerHTML='<span class="muted">'+e.message+'</span>'; }
 }
 async function loadCas(){
   const d = await j('/api/cas');
@@ -322,7 +357,7 @@ async function init(){
   $('#p-challs').innerHTML=['http-01','dns-01','tls-alpn-01','device-attest-01']
     .map(c=>`<label style="display:flex;gap:4px;align-items:center;margin:0"><input type="checkbox" value="${c}" style="width:auto"> ${c}</label>`).join('');
   // carga inicial + refresh
-  function tick(){loadStatus();loadCerts();}
+  function tick(){loadStatus();loadCerts();loadHaproxy();loadPg();}
   tick();loadCas();loadProvs();
   setInterval(tick,5000);setInterval(loadProvs,15000);
 }

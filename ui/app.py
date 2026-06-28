@@ -202,6 +202,66 @@ def root_crt():
     return FileResponse(ROOT_CRT, media_type="application/x-pem-file", filename="root_ca.crt")
 
 
+HAPROXY_STATS = os.environ.get("HAPROXY_STATS_URL", "http://haproxy:8404/;csv")
+PG_USER = os.environ.get("PG_USER", "stepca")
+PG_PASSWORD = os.environ.get("PG_PASSWORD", "")
+PG_HOSTS = [h for h in os.environ.get("PG_HOSTS", "pg-primary,pg-standby").split(",") if h]
+
+
+@app.get("/api/haproxy")
+async def haproxy():
+    """Estado de los backends del balanceador (HAProxy stats CSV)."""
+    try:
+        async with httpx.AsyncClient(timeout=4) as c:
+            r = await c.get(HAPROXY_STATS)
+            r.raise_for_status()
+            rows = r.text.strip().splitlines()
+        out = []
+        for line in rows[1:]:
+            f = line.split(",")
+            if len(f) < 18:
+                continue
+            px, sv, status = f[0], f[1], f[17]
+            if sv in ("FRONTEND", "BACKEND"):
+                continue
+            out.append({"backend": px, "server": sv, "status": status})
+        return {"ok": True, "servers": out}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:150]}
+
+
+def _pg_node(host):
+    try:
+        import psycopg2
+    except Exception:
+        return {"host": host, "reachable": False, "error": "psycopg2 no disponible"}
+    try:
+        conn = psycopg2.connect(host=host, port=5432, user=PG_USER, password=PG_PASSWORD,
+                                dbname="stepca_int", connect_timeout=3)
+        cur = conn.cursor()
+        cur.execute("SELECT pg_is_in_recovery()")
+        in_rec = cur.fetchone()[0]
+        replicas = []
+        if not in_rec:
+            cur.execute("SELECT application_name, state, sync_state, client_addr FROM pg_stat_replication")
+            replicas = [{"app": r[0], "state": r[1], "sync": r[2], "addr": str(r[3])} for r in cur.fetchall()]
+        else:
+            cur.execute("SELECT status, sender_host FROM pg_stat_wal_receiver")
+            wr = cur.fetchone()
+            replicas = [{"app": "walreceiver", "state": wr[0], "sync": "", "addr": str(wr[1])}] if wr else []
+        conn.close()
+        return {"host": host, "reachable": True,
+                "role": "standby" if in_rec else "primary", "replicas": replicas}
+    except Exception as e:
+        return {"host": host, "reachable": False, "error": str(e)[:150]}
+
+
+@app.get("/api/pg-status")
+def pg_status():
+    """Estado de replicación de los nodos PostgreSQL."""
+    return [_pg_node(h) for h in PG_HOSTS]
+
+
 @app.get("/api/provisioners")
 async def provisioners():
     out = {}
