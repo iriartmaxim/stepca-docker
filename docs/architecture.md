@@ -42,12 +42,24 @@ flowchart TD
 
 ## Flujo de aprovisionamiento
 
-1. `stepca-root` se inicializa → genera root_ca + claves.
-2. `init-root.sh` crea CSR de la intermedia y lo firma → `intermediate.crt` en `intermediate-tmp`.
-3. `stepca-intermediate` espera health de la root, copia cert+key, arranca como CA emisora.
-4. Se crea el provisioner `ra_jwk` en la intermedia (`step ca provisioner add`).
-5. `key_ra.sh` produce `ra.key.pem` para la RA.
-6. `stepca-ra-one.local` arranca en modo `stepcas` apuntando a la intermedia.
+El despliegue completo lo orquesta [`scripts/bootstrap.sh`](../scripts/bootstrap.sh)
+(invocado por `make up`), sin pasos manuales ni Ansible:
+
+1. Genera contraseñas fuertes (`gen-secrets.sh`).
+2. Genera el par de claves del provisioner `ra_jwk` (clave pública → config de la
+   intermedia; clave privada → `ra.key.pem` de la RA). Idempotente.
+3. Escribe el `ca.json` de la Intermediate con el provisioner `ra_jwk` embebido.
+4. Levanta `stepca-root` → se inicializa y `init-root.sh` firma el cert intermedio
+   en el volumen `intermediate-tmp`.
+5. Levanta `stepca-intermediate` → `init-intermediate.sh` copia cert+key y arranca
+   como CA emisora (su DB **se persiste** en `persistent/intermediate/db`).
+6. Calcula el fingerprint de la Root y escribe el `ca.json` de la RA (con la política
+   `*.local` en su provisioner ACME).
+7. Levanta `stepca-ra-one.local` en modo `stepcas`: obtiene su cert de identidad de
+   la Intermediate vía `ra_jwk` y expone ACME.
+
+> El playbook `pki-ansible.yaml` es una alternativa que hace lo mismo de forma
+> declarativa; `bootstrap.sh` es el camino recomendado y portable.
 
 ## Almacenamiento
 

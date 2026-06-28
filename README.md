@@ -30,22 +30,25 @@ flowchart TD
 ## Quickstart
 
 ```bash
-# 1. Configuración
-cp .env.example .env                 # ajustá nombres/puertos si querés
-scripts/gen-secrets.sh               # genera contraseñas fuertes (NO 'changeme')
+# 1. Configuración (opcional: ajustá nombres/puertos)
+cp .env.example .env
 
-# 2. Levantar el stack
-make up                              # o: docker compose up -d
+# 2. Levantar TODO el stack sin pasos manuales
+make up        # corre scripts/bootstrap.sh: secretos + claves + configs + arranque
 
 # 3. Verificar salud
 make status
-curl -k https://localhost:9000/health   # Root CA
-curl -k https://localhost:9001/health   # Intermediate CA
-curl -k https://localhost:9100/health   # RA
+make test      # smoke test de las 3 CAs
 ```
 
-> ⚠️ La primera vez, la Root CA genera y firma el certificado intermedio; puede
-> tardar unos segundos hasta que la intermedia y la RA queden `healthy`.
+`make up` ejecuta [scripts/bootstrap.sh](scripts/bootstrap.sh), que de forma
+idempotente: genera contraseñas fuertes, crea el par de claves del provisioner
+`ra_jwk`, escribe las configs de la Intermediate y la RA (con el fingerprint de la
+Root resuelto automáticamente) y levanta las 3 CAs en orden. No requiere Ansible
+ni intervención manual.
+
+> ⚠️ La primera vez, la Root CA genera y firma el certificado intermedio; el
+> bootstrap espera a que cada CA esté `healthy` antes de seguir.
 
 ## Despliegue automatizado (Ansible)
 
@@ -97,6 +100,7 @@ nginx, Traefik y cert-manager.
 ├── pki-ansible.yaml        # despliegue automatizado idempotente
 ├── Makefile                # atajos de operación
 ├── scripts/
+│   ├── bootstrap.sh        # orquesta el despliegue completo (lo usa `make up`)
 │   ├── gen-secrets.sh      # genera contraseñas fuertes
 │   ├── init-root.sh        # crea y firma el cert intermedio
 │   └── init-intermediate.sh# aprovisiona la intermedia (idempotente)

@@ -20,8 +20,8 @@ env: ## Crea .env desde .env.example si no existe
 secrets: ## Genera contraseñas fuertes en secrets/
 	@bash scripts/gen-secrets.sh
 
-up: env secrets ## Levanta el stack en segundo plano
-	@$(COMPOSE) up -d
+up: env ## Levanta el stack completo sin pasos manuales (bootstrap + compose)
+	@bash scripts/bootstrap.sh
 
 down: ## Detiene el stack (conserva el estado)
 	@$(COMPOSE) down

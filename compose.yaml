@@ -68,6 +68,7 @@ services:
       - intermediate-certs:/home/step/certs
       - intermediate-config:/home/step/config
       - intermediate-secrets:/home/step/secrets
+      - intermediate-db:/home/step/db
       - ./scripts/init-intermediate.sh:/scripts/init-intermediate.sh:ro
       - ./persistent/root/certs:/home/step/root_certs:ro
       - intermediate-tmp:/tmp/intermediate_tmp/:ro
@@ -114,7 +115,7 @@ services:
       - ra1-config:/home/step/config
       - ra1-certs:/home/step/certs
       - ra1-secrets:/home/step/secrets
-      - ra1-db:/home/step-ca/db
+      - ra1-db:/home/step/db
       - ra1-tmp:/home/step/tmp
       - /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt
     ports:
@@ -172,6 +173,13 @@ volumes:
       type: none
       o: bind
       device: ./persistent/intermediate/secrets
+
+  intermediate-db:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./persistent/intermediate/db
 
   ra1-config:
     driver: local
