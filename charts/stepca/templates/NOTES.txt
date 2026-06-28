@@ -1,0 +1,14 @@
+stepca desplegado ✅
+
+CA intermedia:   svc/{{ include "stepca.fullname" . }}-intermediate:9000
+{{- range .Values.ra }}
+RA {{ .name }}:  svc/{{ include "stepca.fullname" $ }}-{{ .name }}:9100 {{ if .acme }}(ACME){{ end }}
+{{- end }}
+
+Próximos pasos:
+1. Confiar en la Root CA en tus clientes (kubectl exec ... cat root_ca.crt).
+2. Emitir certificados vía ACME contra la RA (ver docs/issuing-certs.md).
+3. En producción: definí secrets.existingSecret y NO uses 'changeme'.
+
+⚠️  Este chart es un scaffold (Fase 6.5 del ROADMAP). Antes de prod, completá:
+    aprovisionamiento de cert/clave intermedia, ConfigMaps de ca.json e Ingress.

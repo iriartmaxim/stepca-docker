@@ -1,0 +1,8 @@
+# Reglas de cifrado SOPS para los secretos del stack.
+# Reemplazá la clave age por la tuya (age-keygen -o keys.txt).
+# Cifrar:    sops --encrypt secrets/<name>.txt > secrets/<name>.enc.yaml
+# Descifrar: sops --decrypt secrets/<name>.enc.yaml > secrets/<name>.txt
+creation_rules:
+  - path_regex: secrets/.*\.enc\.yaml$
+    age: >-
+      age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p

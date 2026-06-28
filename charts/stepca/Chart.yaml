@@ -1,0 +1,12 @@
+apiVersion: v2
+name: stepca
+description: PKI jerárquica (Root + Intermediate + RA ACME) con Smallstep step-ca
+type: application
+version: 0.1.0
+appVersion: "0.28.3"
+keywords: [pki, ca, step-ca, acme, tls]
+maintainers:
+  - name: Maximiliano Iriart
+home: https://github.com/maximiliano/stepca-docker
+sources:
+  - https://github.com/maximiliano/stepca-docker

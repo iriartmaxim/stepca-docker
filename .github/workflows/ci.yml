@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "mejora/**"]
+  pull_request:
+
+jobs:
+  lint:
+    name: Lint y validación
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: shellcheck (scripts)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y shellcheck
+          shellcheck scripts/*.sh local_scripts/*.sh
+
+      - name: yamllint
+        run: |
+          pipx install yamllint || pip install yamllint
+          yamllint -d '{extends: relaxed, rules: {line-length: disable}}' \
+            compose.yaml compose.prod.yaml pki-ansible.yaml .github/workflows/ci.yml
+
+      - name: Validar docker compose
+        run: |
+          cp .env.example .env
+          docker compose config >/dev/null
+          docker compose -f compose.yaml -f compose.prod.yaml config >/dev/null
+          echo "✅ compose válido"
+
+  secrets-scan:
+    name: Escaneo de secretos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  e2e:
+    name: Test de integración E2E
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar entorno
+        run: |
+          cp .env.example .env
+          bash scripts/gen-secrets.sh
+      - name: Levantar stack
+        run: docker compose up -d
+      - name: Esperar salud y smoke test
+        run: |
+          for i in $(seq 1 30); do
+            if bash scripts/smoke-test.sh; then exit 0; fi
+            echo "esperando… ($i)"; sleep 10
+          done
+          echo "❌ El stack no quedó saludable a tiempo"
+          docker compose logs
+          exit 1
+      - name: Logs (si falla)
+        if: failure()
+        run: docker compose logs
+      - name: Teardown
+        if: always()
+        run: docker compose down -v

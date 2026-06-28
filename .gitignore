@@ -1,0 +1,43 @@
+# ──────────────────────────────────────────────────────────────
+#  Secretos y material criptográfico — NUNCA versionar
+# ──────────────────────────────────────────────────────────────
+# Contraseñas reales (solo se versionan los *.example)
+secrets/*
+!secrets/*.example
+!secrets/.gitkeep
+
+# Estado persistente de las CAs (claves privadas, certs emitidos, DB)
+persistent/
+!persistent/.gitkeep
+
+# Claves privadas en cualquier ubicación
+*_key
+*.key
+*.key.pem
+*_ca_key
+*password*
+!*password*.example
+
+# CSRs y material temporal
+*.csr
+
+# Volcado suelto de provisioners (contiene material JWK)
+/text
+
+# Backups (contienen claves)
+backups/
+
+# Secretos cifrados con SOPS se versionan; los planos no
+*.dec.yaml
+
+# Entorno local
+.env
+.env.local
+
+# Sistema operativo / editores
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
