@@ -404,6 +404,63 @@ def key_custody():
             "recommend": "Producción: claves de CA en HSM/PKCS#11 y Root offline (ver docs/hardening.md §2-3)."}
 
 
+@app.get("/api/compliance")
+def compliance():
+    """Tablero de cumplimiento NIST en vivo, consolidando los controles del stack."""
+    import json
+    checks = []
+    crl_ok, crl_missing = True, []
+    for iid in ISSUERS:
+        try:
+            if not crl_info(iid).get("enabled"):
+                crl_ok = False
+                crl_missing.append(iid)
+        except Exception:
+            crl_ok = False
+            crl_missing.append(iid)
+    checks.append({"label": "Revocación distribuida (CRL)", "ok": crl_ok, "nist": "800-15 / 800-57 / SC-17",
+                   "detail": "CRL habilitado en todas las CAs emisoras" if crl_ok
+                   else "CA(s) sin CRL: " + ", ".join(crl_missing)})
+
+    cust = key_custody()["items"]
+    soft = any(i.get("hsm_backed") is False for i in cust)
+    root_online = any(i["ca"] == "Root CA" and i.get("online") is True for i in cust)
+    checks.append({"label": "Claves de CA en HSM/KMS", "ok": not soft, "nist": "800-57",
+                   "detail": "Claves de software en disco — recomendado HSM/PKCS#11" if soft else "Protegidas por HSM/KMS"})
+    checks.append({"label": "Root CA offline", "ok": not root_online, "nist": "800-57",
+                   "detail": "Root ONLINE (sugerido offline salvo para firmar)" if root_online else "Root offline ✓"})
+
+    rbac = bool(UI_OPERATOR_TOKEN or UI_VIEWER_TOKEN)
+    checks.append({"label": "RBAC / separación de funciones", "ok": rbac, "nist": "800-53 AC-5/6",
+                   "detail": "Roles operator/viewer definidos" if rbac else "Sólo token admin (sin separación de roles)"})
+
+    short, max_dur = False, None
+    try:
+        with open(INT_CFG_FILE) as f:
+            d = json.load(f)
+        max_dur = (d.get("authority", {}).get("claims", {}) or {}).get("maxTLSCertDuration")
+        if max_dur:
+            unit = max_dur[-1]
+            num = float(max_dur[:-1])
+            hours = {"h": num, "m": num / 60, "s": num / 3600}.get(unit, 1e9)
+            short = hours <= 24
+    except Exception:
+        pass
+    checks.append({"label": "Vigencia corta de certificados", "ok": short, "nist": "800-57 (crypto-periods)",
+                   "detail": f"maxTLSCertDuration = {max_dur}" if max_dur else "no determinado"})
+
+    try:
+        audit_n = audit(limit=1)["count"]
+    except Exception:
+        audit_n = 0
+    checks.append({"label": "Auditoría / trazabilidad", "ok": audit_n > 0, "nist": "800-53 AU",
+                   "detail": f"{audit_n} eventos en el feed de auditoría"})
+
+    score = sum(1 for c in checks if c["ok"])
+    return {"checks": checks, "score": score, "total": len(checks),
+            "note": "Perfil de laboratorio: las brechas (HSM, Root offline) se cierran en producción (docs/hardening.md)."}
+
+
 class UiCfgReq(BaseModel):
     cert_warn_h: float
     cert_crit_h: float

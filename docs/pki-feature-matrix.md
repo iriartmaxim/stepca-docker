@@ -41,3 +41,4 @@ Leyenda: ✅ tiene · 🟡 parcial · ⬜ falta · ★ priorizado para implement
 
 Fuentes: comparativas EJBCA/Keyfactor/Venafi y step-ca/Vault (Keyfactor docs,
 Smallstep, Axelspire 2026).
+| 19 | **Dashboard de cumplimiento** | Keyfactor, Venafi | ✅ Cumplimiento (NIST) en vivo | — |

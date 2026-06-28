@@ -59,3 +59,4 @@ notificaciones, reporting/compliance, API keys, multi-tenant, métricas.)
 - B3 ✅ RBAC: roles viewer/operator/admin (tokens + /api/whoami, gating por endpoint).
 - B5 ✅ Revocación masiva de los certs filtrados (/api/revoke-bulk, operator+).
 - A5/cfg ✅ Edición de claims de duración por provisioner (/api/provisioner-claims).
+- compliance ✅ Dashboard de Cumplimiento NIST en vivo (/api/compliance, sección UI).

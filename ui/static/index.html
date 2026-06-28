@@ -74,6 +74,7 @@
     <button data-sec="csr"><span class="ico">📝</span> Generar CSR</button>
     <button data-sec="inv"><span class="ico">🗂️</span> Inventario</button>
     <button data-sec="audit"><span class="ico">🕓</span> Auditoría</button>
+    <button data-sec="compliance"><span class="ico">✅</span> Cumplimiento</button>
     <button data-sec="ops"><span class="ico">🛠️</span> Operaciones</button>
     <button data-sec="config"><span class="ico">⚙️</span> Configuración</button>
   </nav>
@@ -224,6 +225,15 @@
       </div>
     </section>
 
+    <!-- CUMPLIMIENTO -->
+    <section id="sec-compliance">
+      <div class="card"><h2>Cumplimiento (NIST) <span id="comp-score" class="muted" style="font-size:14px"></span></h2>
+        <div class="muted" style="font-size:12px;margin-bottom:8px">Estado en vivo de los controles del stack frente a las recomendaciones NIST.</div>
+        <table id="comp-tbl"><thead><tr><th>Control</th><th>Estado</th><th>Referencia</th><th>Detalle</th></tr></thead><tbody></tbody></table>
+        <div id="comp-note" class="muted" style="font-size:12px;margin-top:8px"></div>
+      </div>
+    </section>
+
     <!-- OPERACIONES -->
     <section id="sec-ops">
       <div class="card"><h2>Operaciones</h2>
@@ -278,7 +288,21 @@ document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{
   $('#sec-'+b.dataset.sec).classList.add('active');
   if(b.dataset.sec==='inv') loadCrl();
   if(b.dataset.sec==='audit') loadAudit();
+  if(b.dataset.sec==='compliance') loadCompliance();
 });
+async function loadCompliance(){
+  const tb=$('#comp-tbl tbody');
+  try{
+    const d=await j('/api/compliance');
+    $('#comp-score').textContent=`· ${d.score}/${d.total} controles`;
+    tb.innerHTML=d.checks.map(c=>`<tr>
+      <td><b>${c.label}</b></td>
+      <td><span class="pill ${c.ok?'ok':'warning'}">${c.ok?'cumple':'brecha'}</span></td>
+      <td class="muted" style="font-size:12px">${c.nist}</td>
+      <td class="muted" style="font-size:12px">${c.detail}</td></tr>`).join('');
+    $('#comp-note').textContent='ℹ️ '+d.note;
+  }catch(e){ tb.innerHTML=`<tr><td colspan="4" class="muted">❌ ${e.message}</td></tr>`; }
+}
 
 async function loadStatus(){
   const d = await j('/api/status');
