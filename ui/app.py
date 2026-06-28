@@ -908,29 +908,69 @@ def whoami(x_auth_token: str = Header(default="")):
             "rbac": bool(UI_OPERATOR_TOKEN or UI_VIEWER_TOKEN)}
 
 
+PROV_TYPES = {"ACME", "JWK", "X5C", "SCEP", "OIDC"}
+
+
 class AddProvReq(BaseModel):
     name: str
-    issuer: str = "default"      # CA intermedia sobre la que se opera
-    challenges: list[str] = []   # para ACME; vacío = todos
+    issuer: str = "default"          # CA intermedia sobre la que se opera
+    ptype: str = "ACME"              # ACME | JWK | X5C | SCEP | OIDC
+    challenges: list[str] = []       # ACME: tipos de challenge (vacío = todos)
+    jwk_password: str = ""           # JWK: contraseña para cifrar la clave generada
+    x5c_root_pem: str = ""           # X5C: PEM del/los certificado(s) raíz de confianza
+    scep_challenge: str = ""         # SCEP: secreto compartido (challenge)
+    client_id: str = ""              # OIDC: client_id de la app
+    client_secret: str = ""          # OIDC: client_secret (si aplica)
+    config_endpoint: str = ""        # OIDC: .../.well-known/openid-configuration
 
 
 @app.post("/api/provisioners")
 def add_provisioner(req: AddProvReq, x_auth_token: str = Header(default="")):
-    """Agrega un provisioner ACME a la intermedia elegida vía la Admin API."""
+    """Agrega un provisioner (ACME/JWK/X5C/SCEP/OIDC) a la intermedia vía la Admin API."""
     _require_admin(x_auth_token)
     name = req.name.strip()
     if not PROV_NAME_RE.match(name):
         raise HTTPException(400, "Nombre inválido (alfanumérico, . _ -)")
-    chs = [c for c in req.challenges if c in PROV_CHALLENGES]
-    cmd = ["step", "ca", "provisioner", "add", name, "--type", "ACME"]
-    for c in chs:
-        cmd += ["--challenge", c]
-    cmd += _admin_args(req.issuer)
-    p = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-    out = (p.stdout or "") + (p.stderr or "")
-    if p.returncode != 0:
-        raise HTTPException(400, "Error: " + out.strip())
-    return {"ok": True, "output": out.strip() or f"Provisioner '{name}' agregado."}
+    ptype = req.ptype.upper()
+    if ptype not in PROV_TYPES:
+        raise HTTPException(400, "Tipo de provisioner no soportado")
+    with tempfile.TemporaryDirectory() as td:
+        cmd = ["step", "ca", "provisioner", "add", name, "--type", ptype]
+        if ptype == "ACME":
+            for c in req.challenges:
+                if c in PROV_CHALLENGES:
+                    cmd += ["--challenge", c]
+        elif ptype == "JWK":
+            if not req.jwk_password:
+                raise HTTPException(400, "JWK requiere una contraseña para la clave")
+            pwf = os.path.join(td, "jwkpw")
+            with open(pwf, "w") as f:
+                f.write(req.jwk_password)
+            cmd += ["--create", "--password-file", pwf]
+        elif ptype == "X5C":
+            if "BEGIN CERTIFICATE" not in req.x5c_root_pem:
+                raise HTTPException(400, "X5C requiere el PEM del certificado raíz de confianza")
+            rf = os.path.join(td, "x5c-root.pem")
+            with open(rf, "w") as f:
+                f.write(req.x5c_root_pem)
+            cmd += ["--x5c-root", rf]
+        elif ptype == "SCEP":
+            if not req.scep_challenge:
+                raise HTTPException(400, "SCEP requiere un challenge (secreto compartido)")
+            cmd += ["--challenge", req.scep_challenge,
+                    "--encryption-algorithm-identifier", "2"]
+        elif ptype == "OIDC":
+            if not (req.client_id and req.config_endpoint):
+                raise HTTPException(400, "OIDC requiere client_id y configuration_endpoint")
+            cmd += ["--client-id", req.client_id, "--configuration-endpoint", req.config_endpoint]
+            if req.client_secret:
+                cmd += ["--client-secret", req.client_secret]
+        cmd += _admin_args(req.issuer)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        out = (p.stdout or "") + (p.stderr or "")
+        if p.returncode != 0:
+            raise HTTPException(400, "Error: " + out.strip())
+        return {"ok": True, "output": out.strip() or f"Provisioner '{name}' ({ptype}) agregado."}
 
 
 class RevokeReq(BaseModel):

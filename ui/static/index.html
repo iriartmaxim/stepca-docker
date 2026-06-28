@@ -118,15 +118,30 @@
     <section id="sec-provs">
       <div class="card"><h2>Provisioners por CA</h2><div id="provs"></div></div>
       <div class="card" id="prov-manage" style="display:none">
-        <h2>Agregar provisioner ACME (Admin API)</h2>
+        <h2>Agregar provisioner (Admin API)</h2>
         <div class="row">
-          <div><label>Intermedia</label><select id="p-issuer"></select></div>
-          <div><label>Nombre</label><input id="p-name" placeholder="acme-extra"></div>
-          <div><label>Challenges (vacío = todos)</label>
-            <div id="p-challs" style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px;padding-top:6px"></div></div>
+          <div><label>Intermedia<span class="tip" title="CA intermedia sobre la que se crea el provisioner.">?</span></label><select id="p-issuer"></select></div>
+          <div><label>Tipo<span class="tip" title="Método de enrolamiento: ACME (automático, ej. lego/certbot), JWK (token firmado), X5C (mTLS con un cert de confianza), SCEP (dispositivos/MDM), OIDC (login con un IdP).">?</span></label>
+            <select id="p-type" onchange="provTypeChanged()">
+              <option value="ACME">ACME</option><option value="JWK">JWK</option>
+              <option value="X5C">X5C</option><option value="SCEP">SCEP</option><option value="OIDC">OIDC</option>
+            </select></div>
+          <div><label>Nombre<span class="tip" title="Identificador único del provisioner dentro de la CA (alfanumérico, . _ -).">?</span></label><input id="p-name" placeholder="mi-provisioner"></div>
+        </div>
+        <div id="pf-acme" class="row"><div><label>Challenges (vacío = todos)<span class="tip" title="Tipos de desafío ACME habilitados: http-01, dns-01, tls-alpn-01, device-attest-01. Vacío = todos.">?</span></label>
+          <div id="p-challs" style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px;padding-top:6px"></div></div></div>
+        <div id="pf-jwk" class="row" style="display:none"><div><label>Contraseña de la clave<span class="tip" title="JWK genera un par de claves; esta contraseña cifra la clave privada. Guardala: se necesita para emitir con este provisioner.">?</span></label><input id="p-jwkpw" type="password" placeholder="contraseña fuerte"></div></div>
+        <div id="pf-x5c" class="row" style="display:none"><div><label>PEM del root de confianza<span class="tip" title="X5C autentica presentando un certificado emitido por este root. Pegá el/los certificado(s) raíz en PEM (-----BEGIN CERTIFICATE-----).">?</span></label><textarea id="p-x5c" rows="4" placeholder="-----BEGIN CERTIFICATE-----" style="width:100%;font-family:monospace;font-size:11px"></textarea></div></div>
+        <div id="pf-scep" class="row" style="display:none"><div><label>Challenge (secreto)<span class="tip" title="SCEP usa un secreto compartido que el dispositivo/MDM envía al enrolarse. Definí un secreto fuerte.">?</span></label><input id="p-scep" placeholder="secreto compartido"></div></div>
+        <div id="pf-oidc" style="display:none">
+          <div class="row">
+            <div><label>client_id<span class="tip" title="ID de la aplicación registrada en tu proveedor de identidad (Google, Azure AD, Keycloak, etc.).">?</span></label><input id="p-oidc-id" placeholder="xxxxx.apps..."></div>
+            <div><label>client_secret<span class="tip" title="Secreto de la aplicación OIDC (si tu IdP lo requiere).">?</span></label><input id="p-oidc-secret" type="password"></div>
+          </div>
+          <div class="row"><div><label>configuration_endpoint<span class="tip" title="URL .well-known/openid-configuration del IdP. step-ca la consulta al agregar, así que debe ser accesible.">?</span></label><input id="p-oidc-cfg" placeholder="https://idp/.well-known/openid-configuration"></div></div>
         </div>
         <div class="row">
-          <div><label>Token de operador</label><input id="p-token" type="password" placeholder="UI_TOKEN"></div>
+          <div><label>Token de operador<span class="tip" title="Token de rol admin (UI_TOKEN). La gestión de provisioners requiere admin.">?</span></label><input id="p-token" type="password" placeholder="UI_TOKEN"></div>
           <div style="flex:0"><label>&nbsp;</label><button class="primary" onclick="addProv()">Agregar</button></div>
         </div>
         <pre id="provOut" style="display:none"></pre>
@@ -483,13 +498,25 @@ async function loadProvs(){
   }
   $('#provs').innerHTML=h;
 }
+function provTypeChanged(){
+  const t=$('#p-type').value;
+  ['acme','jwk','x5c','scep','oidc'].forEach(k=>{
+    $('#pf-'+k).style.display = (t.toLowerCase()===k)?'':'none';
+  });
+}
 async function addProv(){
   const out=$('#provOut'); out.style.display='block'; out.textContent='Agregando…';
-  const challenges=[...document.querySelectorAll('#p-challs input:checked')].map(c=>c.value);
+  const t=$('#p-type').value;
+  const body={name:$('#p-name').value,issuer:$('#p-issuer').value,ptype:t};
+  if(t==='ACME') body.challenges=[...document.querySelectorAll('#p-challs input:checked')].map(c=>c.value);
+  if(t==='JWK') body.jwk_password=$('#p-jwkpw').value;
+  if(t==='X5C') body.x5c_root_pem=$('#p-x5c').value;
+  if(t==='SCEP') body.scep_challenge=$('#p-scep').value;
+  if(t==='OIDC'){ body.client_id=$('#p-oidc-id').value; body.client_secret=$('#p-oidc-secret').value; body.config_endpoint=$('#p-oidc-cfg').value; }
   try{
     const r=await fetch('/api/provisioners',{method:'POST',
       headers:{'Content-Type':'application/json','X-Auth-Token':$('#p-token').value},
-      body:JSON.stringify({name:$('#p-name').value,issuer:$('#p-issuer').value,challenges})});
+      body:JSON.stringify(body)});
     if(!r.ok){out.textContent='❌ '+(await r.text());return;}
     const d=await r.json(); out.textContent='✅ '+d.output; loadProvs();
   }catch(e){out.textContent='❌ '+e.message;}

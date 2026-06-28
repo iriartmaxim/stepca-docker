@@ -12,7 +12,7 @@ Estado: ⬜ pendiente · 🚧 en curso · ✅ hecho. Cada avance: commit en main
    solo en el tablero Estado.
 6. ✅ **Estado**: separar Roots / Intermedias / RAs (incluye intermedias adicionales).
 7. ✅ **CAs**: dos cajas distintas (Roots / Intermedias).
-8. ⬜ **Provisioners**: soportar más tipos + (?) por campo (qué es y cómo completarlo).
+8. ✅ **Provisioners**: alta type-aware (ACME/JWK/X5C/SCEP/OIDC) + (?) por campo.
 
 ## Notas de diseño
 - Mantener UI sin socket de Docker. #5 (autodespliegue) requiere que la UI dispare un
@@ -27,3 +27,4 @@ Estado: ⬜ pendiente · 🚧 en curso · ✅ hecho. Cada avance: commit en main
 - #3 ✅ Inventario: detalle en modal + paginación 10/pág (Anterior/Siguiente, Esc/backdrop cierran).
 - #1 ✅ Emitir: tooltips (?), perfiles=templates con autocompletado, validez (not_after).
 - #2 ✅ CSR: templates con autocompletado (mode/clave/CN/desc) + tooltips por campo.
+- #8 ✅ Alta de provisioners type-aware (5 tipos) con campos y tooltips por tipo.
