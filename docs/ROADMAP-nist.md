@@ -23,9 +23,11 @@ Estado: ⬜ pendiente · 🚧 en curso · ✅ hecho.
 - ⬜ Soporte PKCS#11 opt-in vía env (documentado en hardening §2) + verificación desde la UI.
 - ✅ UI: indicador Root online/offline (NIST sugiere offline). ⬜ guía de ceremonia.
 
-### A3. Gobierno documental: CP/CPS + políticas  ⬜
+### A3. Gobierno documental: CP/CPS + políticas  🚧
 - ⬜ Plantilla CP/CPS (RFC 3647) versionada + link desde la UI.
-- ⬜ UI: editor de `policy.x509` / `policy.ssh` (allow/deny DNS, wildcard) vía Admin API.
+- 🟡 Editor de policy.x509 vía Admin API BLOQUEADO: la policy inline en el ca.json deja
+  al provisioner en standalone mode; step ca policy exige policy gestionada en DB.
+- ✅ Alternativa lograda: edición de CLAIMS de duración por provisioner (A5).
 
 ### A4. Auditoría y trazabilidad  ✅ (núcleo)
 - ✅ UI: sección "Auditoría" — línea de tiempo de emisiones (inventario) + revocaciones
@@ -56,3 +58,4 @@ notificaciones, reporting/compliance, API keys, multi-tenant, métricas.)
 - A2 ✅ (panel) Custodia de claves en la UI (/api/key-custody, avisos NIST).
 - B3 ✅ RBAC: roles viewer/operator/admin (tokens + /api/whoami, gating por endpoint).
 - B5 ✅ Revocación masiva de los certs filtrados (/api/revoke-bulk, operator+).
+- A5/cfg ✅ Edición de claims de duración por provisioner (/api/provisioner-claims).

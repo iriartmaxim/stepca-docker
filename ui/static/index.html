@@ -247,6 +247,18 @@
       </div>
       <div class="card"><h2>Custodia de claves (NIST 800-57)</h2><div id="cfg-custody"></div>
         <div id="cfg-custody-note" class="muted" style="font-size:12px;margin-top:8px"></div></div>
+      <div class="card" id="claims-card" style="display:none"><h2>Claims de emisión (editable · admin)</h2>
+        <div class="muted" style="font-size:12px;margin-bottom:8px">Duraciones de certificado por provisioner (NIST: restringir vigencia). Formato: 5m, 12h, 24h.</div>
+        <div class="row" style="align-items:flex-end">
+          <div style="flex:0"><label>Provisioner</label><input id="cl-prov" value="web" style="width:110px"></div>
+          <div style="flex:0"><label>Mín</label><input id="cl-min" value="5m" style="width:80px"></div>
+          <div style="flex:0"><label>Default</label><input id="cl-def" value="24h" style="width:80px"></div>
+          <div style="flex:0"><label>Máx</label><input id="cl-max" value="24h" style="width:80px"></div>
+          <div><label>Token (admin)</label><input id="cl-token" type="password"></div>
+          <div style="flex:0"><label>&nbsp;</label><button class="primary" onclick="saveClaims()">Guardar</button></div>
+        </div>
+        <span id="cl-msg" class="muted" style="font-size:12px"></span>
+      </div>
       <div class="card"><h2>Intermediate CA · claims y provisioners</h2><div id="cfg-int"></div></div>
       <div class="card"><h2>Infraestructura</h2><div id="cfg-infra"></div></div>
       <div class="muted" style="font-size:12px">Vista de sólo lectura. La edición aplicable se agrega en próximas iteraciones (ver docs/ROADMAP-ui.md).</div>
@@ -296,7 +308,11 @@ async function loadSettings(){
       'CA emisora (default)':u.int_ca_url,'CAs emisoras':u.issuers.map(i=>i.label).join(', ')})}</table>`;
     if(ADMIN){ $('#cfg-edit').style.display='block';
       if(!$('#cf-warn').value) $('#cf-warn').value=u.cert_warn_h;
-      if(!$('#cf-crit').value) $('#cf-crit').value=u.cert_crit_h; }
+      if(!$('#cf-crit').value) $('#cf-crit').value=u.cert_crit_h;
+      $('#claims-card').style.display='block'; const cl=c.claims||{};
+      if(cl.minTLSCertDuration&&$('#cl-min').value==='5m') $('#cl-min').value=cl.minTLSCertDuration;
+      if(cl.defaultTLSCertDuration&&$('#cl-def').value==='24h') $('#cl-def').value=cl.defaultTLSCertDuration;
+      if(cl.maxTLSCertDuration&&$('#cl-max').value==='24h') $('#cl-max').value=cl.maxTLSCertDuration; }
     if(c.error){ $('#cfg-int').innerHTML='<span class="muted">'+c.error+'</span>'; }
     else{
       $('#cfg-int').innerHTML=`<table>${kv({'dnsNames':c.dns_names,'DB':c.db_type,'Admin API':c.enable_admin,
@@ -317,6 +333,15 @@ async function checkRole(tok){
     const b=ROLEBADGE[d.role]||[d.role,'inherit'];
     el.innerHTML=`rol: <span class="pill" style="background:${b[1]};color:#0d1117">${b[0]}</span>`;
   }catch(e){ el.textContent=''; }
+}
+async function saveClaims(){
+  const m=$('#cl-msg'); m.textContent='Guardando…';
+  try{
+    const r=await fetch('/api/provisioner-claims',{method:'POST',headers:{'Content-Type':'application/json','X-Auth-Token':$('#cl-token').value},
+      body:JSON.stringify({issuer:'default',provisioner:$('#cl-prov').value,x509_min:$('#cl-min').value,x509_default:$('#cl-def').value,x509_max:$('#cl-max').value})});
+    if(!r.ok){ m.textContent='❌ '+(await r.text()); return; }
+    m.textContent='✅ Claims actualizados'; loadSettings();
+  }catch(e){ m.textContent='❌ '+e.message; }
 }
 async function loadKeyCustody(){
   try{

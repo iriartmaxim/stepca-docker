@@ -36,11 +36,15 @@ socket de Docker (manteniendo UI-sin-socket).
 - ✅ Datos en vivo: HAProxy stats (CSV, /api/haproxy), replicación de Postgres
   (/api/pg-status con psycopg2), links a Grafana/Prometheus/Targets.
 
-### 5. Sección Configuración en la UI  ✅ (núcleo)
+### 5. Sección Configuración en la UI  ✅
 - ✅ Lectura: sección Configuración + /api/settings (UI/emisión, claims y provisioners
   de la intermedia, infra Postgres/HAProxy). La UI monta la config de la intermedia ro.
 - ✅ Edición de umbrales UI (por vencer/crítico) en runtime (/api/settings/ui, persistido).
-- ⬜ Edición de claims/políticas (vía Admin API) — follow-up.
+- ✅ Edición de claims de duración (min/default/max) por provisioner vía Admin API
+  (/api/provisioner-claims, admin-only). Card en Configuración.
+- 🟡 Editor de políticas x509 (allow/deny DNS): BLOQUEADO — la política inline en el
+  ca.json deja al provisioner en "standalone mode"; step ca policy requiere política
+  gestionada en DB. Requeriría migrar la policy (afecta la restricción *.local). Pendiente.
 
 ## Mejoras (post-5)
 - ⬜ Performance: pooling/índices Postgres, tuning step-ca, caché UI, recarga de

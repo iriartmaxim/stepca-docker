@@ -818,6 +818,36 @@ def revoke_bulk(req: RevokeBulkReq, x_auth_token: str = Header(default="")):
     return {"revoked": ok, "failed": failed, "results": results}
 
 
+DUR_RE = re.compile(r"^\d+(\.\d+)?(ns|us|µs|ms|s|m|h)$")
+
+
+class ProvClaimsReq(BaseModel):
+    issuer: str = "default"
+    provisioner: str = "web"
+    x509_min: str
+    x509_default: str
+    x509_max: str
+
+
+@app.post("/api/provisioner-claims")
+def update_provisioner_claims(req: ProvClaimsReq, x_auth_token: str = Header(default="")):
+    """Edita las duraciones (min/default/max) de un provisioner vía la Admin API."""
+    _require_admin(x_auth_token)
+    if not PROV_NAME_RE.match(req.provisioner):
+        raise HTTPException(400, "Provisioner inválido")
+    for d in (req.x509_min, req.x509_default, req.x509_max):
+        if not DUR_RE.match(d):
+            raise HTTPException(400, f"Duración inválida: {d} (ej.: 5m, 12h, 24h)")
+    cmd = ["step", "ca", "provisioner", "update", req.provisioner,
+           "--x509-min-dur", req.x509_min, "--x509-default-dur", req.x509_default,
+           "--x509-max-dur", req.x509_max] + _admin_args(req.issuer)
+    p = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    out = (p.stdout or "") + (p.stderr or "")
+    if p.returncode != 0:
+        raise HTTPException(400, "Error: " + out.strip())
+    return {"ok": True, "output": out.strip() or "Claims actualizados."}
+
+
 def _fetch_crl(issuer):
     iss = ISSUERS.get(issuer)
     if not iss:
